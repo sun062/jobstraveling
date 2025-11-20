@@ -1,107 +1,102 @@
 import streamlit as st
-from streamlit.components.v1 import html
-import json
 import os
+import json
+from streamlit.components.v1 import html
 
-# --- 1. 파일 로드 및 HTML 렌더링 함수 ---
+# --- 상수 정의 ---
+# GitHub 파일 구조(image_47d51e.png)에 따라 HTML 파일들이 저장된 하위 디렉토리 이름
+HTML_DIR = "htmls"
 
-def load_html_content(filepath):
-    """지정된 파일 경로에서 HTML 내용을 읽어 반환합니다."""
+# --- 유틸리티 함수 ---
+def get_html_content(file_name):
+    """HTML 파일을 읽어 내용을 반환합니다."""
+    # os.path.join을 사용하여 'htmls' 디렉토리와 파일명을 결합하여 올바른 경로를 만듭니다.
+    file_path = os.path.join(HTML_DIR, file_name)
+    
+    # ----------------------------------------------------
+    # 경로 문제 해결을 위한 핵심 수정 부분
+    # ----------------------------------------------------
     try:
-        # 파일이 현재 스크립트와 같은 디렉토리에 있다고 가정합니다.
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        return f"<h1>오류: {filepath} 파일을 찾을 수 없습니다.</h1>"
-    except Exception as e:
-        return f"<h1>오류 발생: {e}</h1>"
+        # 경로를 명확히 보여주는 오류 메시지 추가
+        st.error(f"❌ 오류: '{file_name}' 파일을 찾을 수 없습니다.")
+        st.caption(f"시도된 경로: `{file_path}`")
+        st.caption("🚨 'htmls' 디렉토리가 'app.py'와 같은 위치에 있는지 확인해주세요.")
+        return None
 
-def render_html_page(html_content, key):
-    """지정된 HTML 컨텐츠를 Streamlit에 렌더링하고, 높이를 자동 설정합니다."""
-    
-    # 페이지 상태에 따라 높이를 조정합니다.
-    if key == 'home':
-        height = 1200  # 홈 화면은 내용이 길어질 수 있으므로 높이를 크게 설정
-    elif key == 'signup':
-        height = 800
-    else:
-        height = 650
+def render_html(file_name, key):
+    """지정된 HTML 파일을 스트림릿에 렌더링합니다."""
+    html_content = get_html_content(file_name)
+    if html_content:
+        # 캔버스 환경에서 필요한 전역 변수를 HTML에 삽입
+        auth_token = st.session_state.get('auth_token', '')
+        # Firebase config는 실제 환경에서 자동으로 제공되지만, 로컬 테스트를 위해 빈 JSON을 사용합니다.
+        firebase_config = json.dumps({}) 
+        app_id = "job_trekking_app"
+
+        # HTML에 JavaScript 변수 형태로 삽입
+        script_vars = f"""
+            <script>
+                // Canvas 환경 변수를 설정합니다.
+                const __initial_auth_token = "{auth_token}";
+                const __firebase_config = '{firebase_config}';
+                const __app_id = "{app_id}";
+            </script>
+        """
         
-    html(html_content, height=height, scrolling=True)
-
-# --- 2. Streamlit App Logic (Python) ---
-
-# Streamlit 세션 상태 초기화
-if 'page' not in st.session_state:
-    st.session_state['page'] = 'login'
-if 'username' not in st.session_state:
-    st.session_state['username'] = 'Guest'
-
-# 페이지 전환 함수 (Streamlit 상태를 변경)
-def set_page(page_name):
-    """세션 상태를 변경하여 페이지를 전환합니다."""
-    st.session_state['page'] = page_name
-
-# HTML에서 받은 메시지를 처리하는 리스너
-def handle_message():
-    """HTML iframe에서 전송된 메시지를 처리합니다."""
-    try:
-        # Streamlit Component의 "return_value"로 메시지를 받습니다.
-        message = html("", height=0, key="message_listener", return_value=None)
+        full_html = script_vars + html_content
         
-        if message:
-            if message.get('type') == 'NAVIGATE':
-                new_page = message.get('page')
-                if new_page in ['login', 'signup', 'forgot_password', 'home']:
-                    set_page(new_page)
-                    
-            elif message.get('type') == 'LOGIN_SUCCESS':
-                st.session_state['username'] = message.get('username', 'User')
-                set_page('home')
-                
-    except Exception as e:
-        st.error(f"메시지 처리 오류: {e}")
+        # Streamlit에 HTML 렌더링
+        html(full_html, height=800, scrolling=True, key=key)
 
 
-# 메인 앱 실행 함수
-def main_app():
-    # 1. 메시지 리스너를 먼저 실행하여 페이지 전환 요청을 받습니다.
-    handle_message() 
-    
-    # 2. 페이지 상태에 따라 적절한 HTML 파일을 읽고 렌더링
-    
-    current_page = st.session_state['page']
-    
-    # 파일 경로를 상태 이름에 맞게 설정
-    page_files = {
-        'login': 'login.html',
-        'signup': 'signup.html',
-        'forgot_password': 'forgot_password.html',
-        'home': 'home.html',
-    }
-    
-    filepath = page_files.get(current_page)
-    
-    if filepath:
-        html_content = load_html_content(filepath)
-        render_html_page(html_content, current_page)
-    else:
-        st.error(f"알 수 없는 페이지 상태: {current_page}")
+# --- 네비게이션 및 세션 관리 ---
 
-# 사이드바 네비게이션 (개발 테스트용)
-st.sidebar.title("페이지 네비게이션 (TEST)")
-st.sidebar.caption("현재 로그인: " + st.session_state['username'])
-if st.sidebar.button("로그인 화면"):
-    set_page('login')
-if st.sidebar.button("회원가입 화면"):
-    set_page('signup')
-if st.sidebar.button("비밀번호 찾기 화면"):
-    set_page('forgot_password')
-if st.sidebar.button("홈 화면 (로그인 테스트)"):
-    st.session_state['username'] = '테스트 학생' # 테스트를 위해 이름 설정
-    set_page('home')
+# 네비게이션 상태를 관리하는 함수
+def navigate_to(page):
+    st.session_state['current_page'] = page
+    st.rerun()
 
-# 메인 앱 실행
-main_app()
+# --- 메인 앱 로직 ---
+if 'current_page' not in st.session_state:
+    # 앱 시작 시 'login.html'이 먼저 뜨도록 설정
+    st.session_state['current_page'] = 'login'
 
-st.caption("✓ `app.py`가 4개의 HTML 파일을 읽어 상태에 따라 렌더링합니다. HTML 파일들 내부에 모든 로직이 포함되어 있습니다.")
+# Streamlit Component로부터 메시지를 수신하는 콜백 함수 (필요 시 구현)
+def on_message_received(message):
+    if message and 'type' in message and message['type'] == 'NAVIGATE':
+        navigate_to(message['page'])
+
+# 스트림릿 페이지 설정
+st.set_page_config(layout="wide")
+
+# 현재 페이지에 따라 HTML 파일 렌더링
+page_map = {
+    'login': 'login.html',
+    'signup': 'signup.html',
+    'forgot_password': 'forgot_password.html',
+    'home': 'home.html', 
+}
+
+current_page_key = st.session_state['current_page']
+html_file_name = page_map.get(current_page_key, 'login.html')
+
+# UI 표시
+st.title("💼 잡스트레블링 (Job-Trekking) 앱")
+st.write(f"현재 로드 중인 페이지: **{current_page_key.upper()}**")
+
+# HTML 파일 렌더링
+render_html(html_file_name, key=current_page_key)
+
+# --- 로컬 테스트용 네비게이션 버튼 (선택 사항) ---
+st.sidebar.header("페이지 이동 (테스트용)")
+if st.sidebar.button("로그인 페이지"):
+    navigate_to('login')
+if st.sidebar.button("홈 페이지"):
+    navigate_to('home')
+if st.sidebar.button("회원가입 페이지"):
+    navigate_to('signup')
+if st.sidebar.button("비밀번호 찾기"):
+    navigate_to('forgot_password')
