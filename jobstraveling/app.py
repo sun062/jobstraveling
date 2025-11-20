@@ -9,7 +9,7 @@ HTML_DIR = "htmls"
 
 # app.py 파일이 있는 디렉토리의 절대 경로를 가져옵니다. 
 # 이 방법이 Streamlit의 실행 환경 변화에 가장 안정적으로 대응합니다.
-# BASE_DIR은 'app.py'가 있는 폴더의 경로입니다. 예: /Users/username/project/jobstraveling/
+# BASE_DIR은 'app.py'가 있는 폴더의 경로입니다.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
 
 # --- 유틸리티 함수 ---
@@ -28,14 +28,13 @@ def get_html_content(file_name):
         st.caption("🚨 경로 문제가 지속되면, 'app.py'와 'htmls' 폴더가 같은 위치에 있는지 확인해주세요.")
         return None
 
-def render_html(file_name, key):
+# 'key' 인수를 제거하고 Streamlit에 안정적인 HTML 렌더링을 시도합니다.
+def render_html(file_name): 
     """지정된 HTML 파일을 스트림릿에 렌더링합니다."""
     html_content = get_html_content(file_name)
     if html_content:
         # 캔버스 환경에서 필요한 전역 변수를 HTML에 삽입
-        # 현재 인증 토큰은 세션 상태에서 가져옵니다.
         auth_token = st.session_state.get('auth_token', '') 
-        # Firebase config와 app ID는 환경에 따라 설정됩니다.
         firebase_config = json.dumps({}) 
         app_id = "job_trekking_app"
 
@@ -51,9 +50,11 @@ def render_html(file_name, key):
         
         full_html = script_vars + html_content
         
-        # Streamlit에 HTML 렌더링
-        # key는 페이지가 바뀔 때마다 컴포넌트를 새로 렌더링하는 데 도움을 줍니다.
-        html(full_html, height=800, scrolling=True, key=key)
+        # ----------------------------------------------------
+        # Streamlit 컴포넌트 오류 해결을 위한 핵심 수정 부분
+        # html() 함수에서 key 인수를 제거합니다.
+        # ----------------------------------------------------
+        html(full_html, height=800, scrolling=True)
 
 
 # --- 네비게이션 및 세션 관리 ---
@@ -69,12 +70,6 @@ if 'current_page' not in st.session_state:
     # 앱 시작 시 'login.html'이 먼저 뜨도록 설정
     st.session_state['current_page'] = 'login'
 
-# Streamlit Component로부터 메시지를 수신하는 콜백 함수 (필요 시 구현)
-# 현재는 사용되지 않지만, 향후 JavaScript 통신을 위해 남겨둡니다.
-# def on_message_received(message):
-#     if message and 'type' in message and message['type'] == 'NAVIGATE':
-#         navigate_to(message['page'])
-
 # 스트림릿 페이지 설정
 st.set_page_config(layout="wide")
 
@@ -84,19 +79,17 @@ page_map = {
     'signup': 'signup.html',
     'forgot_password': 'forgot_password.html',
     'home': 'home.html', 
-    # 필요한 다른 페이지들도 여기에 추가할 수 있습니다.
 }
 
 current_page_key = st.session_state['current_page']
-# 매핑된 파일 이름이 없으면 기본값으로 'login.html'을 사용합니다.
 html_file_name = page_map.get(current_page_key, 'login.html')
 
 # UI 표시
 st.title("💼 잡스트레블링 (Job-Trekking) 앱")
 st.write(f"현재 로드 중인 페이지: **{current_page_key.upper()}**")
 
-# HTML 파일 렌더링
-render_html(html_file_name, key=current_page_key)
+# HTML 파일 렌더링 (key 인수가 제거됨)
+render_html(html_file_name)
 
 # --- 로컬 테스트용 네비게이션 버튼 ---
 # 사이드바에 테스트용 페이지 이동 버튼을 추가합니다.
