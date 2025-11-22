@@ -12,7 +12,14 @@ INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
 
 # 🚨🚨🚨 사용자님의 Firebase 설정 JSON 문자열이 여기에 반영되었습니다. 🚨🚨🚨
 # 이 값은 이전에 Firebase 콘솔에서 복사한 config 객체입니다.
-FIREBASE_CONFIG = '{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}'
+# JSON 문자열을 Python 딕셔너리로 파싱 후 다시 JSON 문자열로 덤프하여 안정성을 높입니다.
+try:
+    FIREBASE_CONFIG_DICT = json.loads('{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}')
+    FIREBASE_CONFIG = json.dumps(FIREBASE_CONFIG_DICT)
+except json.JSONDecodeError:
+    st.error("FATAL ERROR: Firebase Configuration string is invalid JSON.")
+    FIREBASE_CONFIG = "{}"
+
 
 # 페이지 이름 상수
 PAGE_LOGIN = 'login'
@@ -29,7 +36,7 @@ PAGE_FILES = {
 # --- 2. HTML 로드 및 렌더링 함수 ---
 
 def read_html_file(file_path):
-    """지정된 경로의 HTML 파일 내용을 읽습니다."""
+    """지정된 경로의 HTML 파일 내용을 읽거나 오류 HTML을 반환합니다."""
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(base_dir, file_path)
@@ -37,11 +44,24 @@ def read_html_file(file_path):
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        st.error(f"오류: '{file_path}' 파일을 찾을 수 없습니다.")
-        return None
+        error_html = f"""
+        <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px;">
+            <h3 style="color: #c00;">[파일 로드 오류]</h3>
+            <p><strong>오류:</strong> '{file_path}' 파일을 찾을 수 없습니다.</p>
+            <p>Streamlit 서버 경로를 확인해 주세요.</p>
+        </div>
+        """
+        st.error(f"오류: '{file_path}' 파일을 찾을 수 없습니다. HTML 오류 페이지 로드.")
+        return error_html
     except Exception as e:
-        st.error(f"파일 읽기 중 오류 발생: {e}")
-        return None
+        error_html = f"""
+        <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px;">
+            <h3 style="color: #c00;">[파일 읽기 중 오류]</h3>
+            <p><strong>오류:</strong> {e}</p>
+        </div>
+        """
+        st.error(f"파일 읽기 중 오류 발생: {e}. HTML 오류 페이지 로드.")
+        return error_html
 
 # --- 3. Streamlit 앱 상태 및 흐름 관리 ---
 
@@ -70,6 +90,8 @@ def handle_html_event(value):
             target_page = data.get('page')
             if target_page in PAGE_FILES:
                 st.session_state.current_page = target_page
+                # 페이지 이동 후 바로 컴포넌트를 리렌더링하도록 요청
+                st.rerun() 
             
         elif event_type == 'LOGIN_SUCCESS':
             # 로그인 성공 처리
@@ -77,6 +99,7 @@ def handle_html_event(value):
             st.session_state.user_id = data.get('uid')
             st.session_state.auth_message = f"로그인 성공! 사용자 ID: {st.session_state.user_id}"
             st.session_state.current_page = PAGE_HOME
+            st.rerun() # 홈 페이지로 이동 후 바로 리렌더링
             
         elif event_type == 'LOGOUT_SUCCESS':
             # 로그아웃 성공 처리
@@ -84,6 +107,7 @@ def handle_html_event(value):
             st.session_state.user_id = None
             st.session_state.auth_message = "로그아웃 되었습니다."
             st.session_state.current_page = PAGE_LOGIN
+            st.rerun() # 로그인 페이지로 이동 후 바로 리렌더링
 
         elif event_type == 'AUTH_ERROR':
             # 인증 오류 처리
@@ -93,6 +117,7 @@ def handle_html_event(value):
             # 회원가입 성공 처리
             st.session_state.auth_message = f"회원가입 성공: {data.get('email', '')}. 로그인 페이지로 이동합니다."
             st.session_state.current_page = PAGE_LOGIN
+            st.rerun() # 로그인 페이지로 이동 후 바로 리렌더링
 
 
 # --- 4. 메인 앱 실행 ---
@@ -113,9 +138,12 @@ page_file = PAGE_FILES.get(st.session_state.current_page)
 
 if page_file:
     html_content = read_html_file(page_file)
+    # html_content는 파일 로드 성공 시 HTML 문자열, 실패 시 오류 HTML 문자열을 포함
+    
+    # HTML 콘텐츠가 존재하면 렌더링 준비
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 코드:
-        # 1. Firebase Config와 Auth Token 주입
+        # 1. Firebase Config와 Auth Token 주입 (JSON.stringify로 안정화)
         # 2. Streamlit과의 통신을 위한 로직 (sendToStreamlit)
         js_variables = f"""
         <script>
@@ -124,6 +152,7 @@ if page_file:
             window.appId = '{APP_ID}';
 
             // Streamlit으로 이벤트와 데이터를 다시 보내는 함수 (e.g., 로그인 성공, 페이지 이동)
+            // Streamlit.setComponentValue는 비동기 호출을 지원하며, 잦은 호출은 Streamlit의 렌더링을 유발함.
             function sendToStreamlit(eventType, data = {{}}) {{
                 Streamlit.setComponentValue({{
                     event: eventType,
@@ -135,12 +164,12 @@ if page_file:
         """
         
         # Streamlit HTML 컴포넌트 렌더링
-        # key=None 대신 현재 페이지 키를 사용하여 오류 방지 및 상태 관리
+        # **오류 방지를 위해 현재 페이지 이름을 명시적인 key로 사용합니다.**
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
             scrolling=True, 
-            key=st.session_state.current_page,
+            key=st.session_state.current_page, # 명시적인 key 사용
             return_value=True
         )
         
@@ -148,8 +177,8 @@ if page_file:
         if component_value:
             handle_html_event(component_value)
     
-    st.markdown("---")
-    st.write(f"현재 페이지 '{st.session_state.current_page}'가 렌더링되었습니다.")
+    # st.markdown("---")
+    # st.write(f"현재 페이지 '{st.session_state.current_page}'가 렌더링되었습니다.")
 else:
     st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
 
