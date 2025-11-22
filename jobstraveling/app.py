@@ -157,13 +157,13 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         </script>
         """
         
-        # Streamlit HTML 컴포넌트 렌더링 (try-except로 안정성 강화)
+        # Streamlit HTML 컴포넌트 렌더링 (key 인수를 제거하고 try-except로 안정성 강화)
         try:
+            # key 인수를 제거합니다. (line 165)
             component_value = st.components.v1.html(
                 js_variables + html_content,
                 height=800, 
                 scrolling=True, 
-                key=st.session_state.current_page, 
                 return_value=True
             )
             
