@@ -172,13 +172,11 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         """
         
         try:
-            # HTML 컴포넌트 렌더링
-            # key를 사용하여 Streamlit이 컴포넌트를 강제로 업데이트하도록 유도합니다.
+            # 🚨🚨🚨 여기서 key=... 인수를 제거했습니다. 🚨🚨🚨
             component_value = st.components.v1.html(
                 js_variables + html_content,
                 height=800, 
                 scrolling=True,
-                key=st.session_state.current_page # 현재 페이지 이름으로 key를 설정
             )
             
             # 반환된 값이 유효한 딕셔너리일 때만 이벤트 처리 함수 호출
@@ -186,7 +184,8 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                 handle_html_event(component_value)
                 
         except TypeError as e:
-            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 키워드 인수가 잘못되었을 수 있습니다.")
+            # key 인수가 제거되었으므로, 다른 유형의 TypeError를 처리합니다.
+            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 파라미터나 타입 정의를 확인해주세요.")
             st.code(f"Error details: {e}", language='python')
         except Exception as e:
              st.error(f"🚨 알 수 없는 렌더링 오류: {e}")
