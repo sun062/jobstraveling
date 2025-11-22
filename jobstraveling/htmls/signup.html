@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>회원가입</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Streamlit 컴포넌트 라이브러리 로드 -->
     <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit-component-lib.js"></script>
-    <script>
-        // 전역 변수 및 함수 정의
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 전역 변수 설정
         let auth;
         let db;
-        let appId;
         let authReady = false;
         
         // Streamlit으로 이벤트와 데이터를 다시 보내는 함수 (app.py에서 주입)
@@ -27,98 +29,84 @@
             }
         };
 
-        // *************** Firebase 초기화 함수: 모듈 임포트를 함수 내부로 이동 ***************
+        // Firebase 초기화
         window.initFirebase = async function() {
-            // 모듈 임포트 (함수 호출 시점에 로딩되도록 지연)
-            const firebase = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-            const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const firestoreModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            
-            const { initializeApp, setLogLevel } = firebase;
-            const { getAuth, createUserWithEmailAndPassword } = authModule;
-            const { getFirestore, doc, setDoc } = firestoreModule;
-            
-            window.doc = doc; // 전역으로 노출
-            window.setDoc = setDoc; // 전역으로 노출
-            
-            // 디버그 로깅 활성화
             setLogLevel('Debug');
-            
-            let firebaseConfig;
             try {
-                // app.py에서 전달된 JSON 문자열을 파싱합니다.
                 if (!window.firebaseConfigJsonString) {
                     throw new Error("Firebase Config JSON string is not available.");
                 }
                 
-                firebaseConfig = JSON.parse(window.firebaseConfigJsonString);
-                appId = window.appId; // app.py에서 주입된 appId 로드
-
-                // 유효성 검사
+                const firebaseConfig = JSON.parse(window.firebaseConfigJsonString);
+                
                 if (typeof firebaseConfig !== 'object' || firebaseConfig === null || Object.keys(firebaseConfig).length === 0) {
                     throw new Error("Firebase Config is missing or invalid after parsing.");
                 }
                 
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
-                db = getFirestore(app); 
-                window.db = db; // Firestore 인스턴스를 전역으로 노출
+                db = getFirestore(app); // Firestore 초기화
                 authReady = true;
 
+                // 인증 지속성 설정 및 익명 로그인
+                await setPersistence(auth, browserLocalPersistence);
+                if (window.initialAuthToken) {
+                    await signInWithCustomToken(auth, window.initialAuthToken);
+                } else {
+                    // Firestore 사용 전에 익명 인증을 완료해야 합니다.
+                    await signInAnonymously(auth); 
+                }
+                
+                console.log("Firebase/Firestore initialized and ready.");
+
             } catch (error) {
-                console.error("Firebase 초기화 오류:", error);
-                displayMessage(`Firebase 초기화 실패: ${error.message}`, 'error');
+                console.error("Firebase 초기화 또는 인증 오류:", error);
+                displayMessage(`시스템 오류: 인증 초기화 실패. ${error.message}`, 'error');
             }
         }
         
-        // *************** Streamlit 로딩 이벤트 리스너: initFirebase 호출 ***************
+        // Streamlit 로딩 이벤트 리스너
         if (typeof Streamlit !== 'undefined' && Streamlit.events) {
              Streamlit.events.addEventListener(Streamlit.events.LOADED, function() {
                 Streamlit.setFrameHeight(document.documentElement.scrollHeight);
-                window.initFirebase(); // 모듈 임포트 및 Firebase 초기화 시작
+                window.initFirebase(); 
             });
         }
         
-        // 사용자 회원가입 함수
+        // 사용자 회원가입 함수 (async/await 패턴 강화)
         window.signup = async () => {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const passwordConfirm = document.getElementById('password-confirm').value;
+            const schoolName = document.getElementById('schoolName').value;
+            const className = document.getElementById('className').value;
+            const studentName = document.getElementById('studentName').value;
+            const birthDate = document.getElementById('birthDate').value;
             
-            // 추가된 학생 정보
-            const schoolName = document.getElementById('school-name').value;
-            const className = document.getElementById('class-name').value;
-            const studentName = document.getElementById('student-name').value;
-            const birthDate = document.getElementById('birth-date').value;
-            
-            if (!email || !password || !passwordConfirm || !schoolName || !className || !studentName || !birthDate) {
+            if (!email || !password || !schoolName || !className || !studentName || !birthDate) {
                 displayMessage("모든 필드를 입력해주세요.", 'error');
-                return;
-            }
-
-            if (password !== passwordConfirm) {
-                displayMessage("비밀번호가 일치하지 않습니다.", 'error');
-                return;
-            }
-            
-            if (password.length < 6) {
-                displayMessage("비밀번호는 6자 이상이어야 합니다.", 'error');
                 return;
             }
 
             try {
                 if (!authReady) {
-                    displayMessage("인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", 'error');
+                    displayMessage("시스템 준비 중입니다. 잠시 후 다시 시도해주세요.", 'error');
                     return;
                 }
                 
-                // 1. Firebase Authentication에 사용자 생성
+                displayMessage("회원가입 진행 중...", 'info');
+
+                // 1. Firebase Authentication: 이메일/비밀번호로 사용자 생성
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
                 
-                // 2. Firestore에 추가 사용자 프로필 정보 저장
+                console.log("Step 1: User created successfully. UID:", user.uid);
+                
+                // 2. Firestore: 학생 프로필 정보 저장
+                const appId = window.appId;
+                const userProfileRef = doc(db, `artifacts/${appId}/users/${user.uid}/userProfile/profile`);
+                
                 const profileData = {
-                    email: email,
+                    email: user.email,
                     schoolName: schoolName,
                     className: className,
                     studentName: studentName,
@@ -126,22 +114,22 @@
                     createdAt: new Date().toISOString()
                 };
 
-                // Firestore 경로: /artifacts/{appId}/users/{userId}/userProfile/profile
-                const userProfileRef = doc(db, 
-                    `artifacts/${appId}/users/${user.uid}/userProfile`, 
-                    'profile'
-                );
-
                 await setDoc(userProfileRef, profileData);
                 
-                // 3. 회원가입 성공 이벤트를 Streamlit으로 전송
-                sendToStreamlit('SIGNUP_SUCCESS', { uid: user.uid, email: user.email });
+                console.log("Step 2: User profile saved to Firestore.");
+                
+                // 3. Streamlit: 회원가입 성공 이벤트 전송 및 페이지 전환
+                sendToStreamlit('SIGNUP_SUCCESS', { email: user.email });
+                
+                // 즉시 메시지를 표시하고 Auth 상태 변경을 기다리지 않고 전환
+                displayMessage("회원가입이 완료되었습니다. 로그인 페이지로 이동합니다.", 'success');
                 
             } catch (error) {
-                console.error("회원가입 오류:", error);
+                console.error("회원가입 중 오류 발생:", error);
                 const errorMessage = getFriendlyErrorMessage(error.code || error.message);
                 displayMessage(`회원가입 실패: ${errorMessage}`, 'error');
-                sendToStreamlit('AUTH_ERROR', { message: `회원가입 실패: ${errorMessage}` });
+                // Streamlit에 오류 전송 (선택 사항)
+                // sendToStreamlit('AUTH_ERROR', { message: `회원가입 실패: ${errorMessage}` });
             }
         };
 
@@ -153,9 +141,8 @@
                 case 'auth/invalid-email':
                     return '유효하지 않은 이메일 형식입니다.';
                 case 'auth/weak-password':
-                    return '비밀번호는 6자 이상이어야 합니다.';
+                    return '비밀번호는 6자리 이상이어야 합니다.';
                 default:
-                    // 코드 대신 메시지가 전달될 경우
                     if (typeof errorCode === 'string' && (errorCode.includes("Error:") || errorCode.includes("Firebase:"))) {
                         return errorCode.split("Error: ")[1] || "알 수 없는 오류가 발생했습니다.";
                     }
@@ -166,79 +153,78 @@
         function displayMessage(message, type) {
             const messageBox = document.getElementById('message-box');
             messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-600', 'bg-green-100', 'text-green-600', 'border', 'border-red-300', 'border-green-300');
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-600', 'bg-green-100', 'text-green-600', 'bg-blue-100', 'text-blue-600', 'border', 'border-red-300', 'border-green-300', 'border-blue-300');
             
             if (type === 'error') {
                 messageBox.classList.add('bg-red-100', 'text-red-600', 'border', 'border-red-300');
-            } else {
+            } else if (type === 'success') {
                 messageBox.classList.add('bg-green-100', 'text-green-600', 'border', 'border-green-300');
+            } else if (type === 'info') {
+                messageBox.classList.add('bg-blue-100', 'text-blue-600', 'border', 'border-blue-300');
             }
         }
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" style="font-family: 'Inter', sans-serif;">
-    <div class="w-full max-w-lg bg-white p-8 rounded-xl shadow-2xl">
+    <div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl">
         <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">회원가입</h2>
-        <!-- 오류/성공 메시지 박스 -->
         <div id="message-box" class="mb-4 p-3 rounded-lg text-sm font-medium hidden"></div>
         
         <div class="space-y-4">
-            <!-- 학교 정보 필드 -->
-            <div>
-                <label for="school-name" class="block text-sm font-medium text-gray-700">학교 이름</label>
-                <input id="school-name" type="text" placeholder="예: 잡스트레블링 고등학교" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
-            </div>
-            <div class="flex space-x-4">
-                <div class="w-1/3">
-                    <label for="class-name" class="block text-sm font-medium text-gray-700">반/번호</label>
-                    <input id="class-name" type="text" placeholder="예: 3학년 2반" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
-                </div>
-                <div class="w-2/3">
-                    <label for="student-name" class="block text-sm font-medium text-gray-700">이름</label>
-                    <input id="student-name" type="text" placeholder="예: 홍길동" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
-                </div>
+            <!-- 1. 계정 정보 -->
+            <div class="pt-2">
+                <label for="email" class="block text-sm font-medium text-gray-700">이메일 (ID)</label>
+                <input id="email" type="email" placeholder="job@trekking.com" required 
+                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
             </div>
             <div>
-                <label for="birth-date" class="block text-sm font-medium text-gray-700">생년월일</label>
-                <input id="birth-date" type="date" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
+                <label for="password" class="block text-sm font-medium text-gray-700">비밀번호 (6자리 이상)</label>
+                <input id="password" type="password" placeholder="********" required 
+                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
             </div>
 
-            <!-- 계정 정보 필드 -->
             <div class="pt-4 border-t border-gray-200">
-                <p class="text-md font-semibold text-gray-800 mb-2">계정 정보</p>
+                <h3 class="text-lg font-semibold text-gray-800 mb-3">학생 정보</h3>
+                <!-- 2. 학교 이름 -->
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700">이메일 주소</label>
-                    <input id="email" type="email" placeholder="job@trekking.com" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <label for="schoolName" class="block text-sm font-medium text-gray-700">학교 이름</label>
+                    <input id="schoolName" type="text" placeholder="○○초등학교" required 
+                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
                 </div>
+                <!-- 3. 반 번호 -->
                 <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700">비밀번호 (6자 이상)</label>
-                    <input id="password" type="password" placeholder="********" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <label for="className" class="block text-sm font-medium text-gray-700">학년 / 반</label>
+                    <input id="className" type="text" placeholder="예: 6학년 3반" required 
+                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
                 </div>
+                <!-- 4. 이름 -->
                 <div>
-                    <label for="password-confirm" class="block text-sm font-medium text-gray-700">비밀번호 확인</label>
-                    <input id="password-confirm" type="password" placeholder="********" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500 transition duration-150">
+                    <label for="studentName" class="block text-sm font-medium text-gray-700">이름</label>
+                    <input id="studentName" type="text" placeholder="홍길동" required 
+                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                </div>
+                <!-- 5. 생년월일 -->
+                <div>
+                    <label for="birthDate" class="block text-sm font-medium text-gray-700">생년월일</label>
+                    <input id="birthDate" type="date" required 
+                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
                 </div>
             </div>
-            
+
+            <!-- 회원가입 완료 버튼 -->
             <button onclick="signup()" 
-                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-[1.01]">
+                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-[1.01] mt-6">
                 회원가입 완료
             </button>
         </div>
         
-        <div class="mt-6 flex items-center justify-center space-x-4 text-sm">
-            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'login' })" 
-               class="font-medium text-blue-600 hover:text-blue-500 transition duration-150">
-                로그인 페이지로 돌아가기
+        <div class="mt-4 text-center text-sm">
+            <a href="#" onclick="window.sendToStreamlit('NAVIGATE_TO', { page: 'login' }); return false;" 
+               class="font-medium text-gray-500 hover:text-gray-700 transition duration-150">
+                이미 계정이 있으신가요? 로그인 화면으로 돌아가기
             </a>
         </div>
+
     </div>
 </body>
 </html>
