@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
+import json # JSON 모듈 추가: Mock 데이터를 HTML로 전달하기 위해 필요합니다.
 from datetime import date, datetime 
 
 # --- 1. 환경 설정 및 세션 상태 초기화 ---
@@ -18,6 +19,8 @@ if 'user_data' not in st.session_state:
     st.session_state.user_data = None # 로그인한 사용자 정보
 if 'is_auth_ready' not in st.session_state:
     st.session_state.is_auth_ready = False # Firebase 초기화 상태 (현재는 우회)
+if 'mock_user' not in st.session_state:
+    st.session_state.mock_user = None # 모의 로그인 데이터를 저장하는 세션 상태 추가
 
 # --- 2. HTML 파일 로드 함수 (경로 오류 수정 완료) ---
 def read_html_file(file_name):
@@ -60,13 +63,25 @@ def handle_component_event(component_value):
 # --- 4. 페이지 렌더링 함수 ---
 
 def render_login_page():
-    """로그인 페이지를 렌더링합니다."""
+    """로그인 페이지를 렌더링하고 Mock 데이터를 HTML에 주입합니다."""
     st.title("로그인")
+    
+    # Mock 사용자 데이터 준비
+    mock_data = st.session_state.get('mock_user', None)
+    # Python 객체를 JSON 문자열로 변환하여 JavaScript로 전달
+    mock_user_json = json.dumps(mock_data) if mock_data else 'null'
     
     # HTML 파일을 읽어 컴포넌트로 렌더링
     html_content = read_html_file('login.html')
+    
     if html_content:
-        # Streamlit 컴포넌트 렌더링 시 높이와 스크롤 설정
+        # ** Mock 데이터 주입 **
+        # login.html에 있는 '// MOCK_USER_PLACEHOLDER'를 실제 데이터로 교체합니다.
+        html_content = html_content.replace(
+            '// MOCK_USER_PLACEHOLDER',
+            f'const MOCK_USER_DATA = {mock_user_json};'
+        )
+        
         component_value = components.html(
             html_content,
             height=500,
@@ -83,7 +98,7 @@ def render_login_page():
         navigate(PAGE_SIGNUP)
 
 def render_signup_page():
-    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (UI, 유효성 검사 적용)"""
+    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("회원가입")
 
     # 오늘 날짜와 최소 날짜 설정 (2007년 1월 1일)
@@ -126,20 +141,19 @@ def render_signup_page():
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
                 # **********************************************
-                # 현재는 Firebase 통신 오류를 우회하기 위한 가상 성공 처리 로직입니다.
-                # 실제 데이터 저장은 이루어지지 않으며 페이지 전환만 진행됩니다.
+                # Mock 데이터 저장 및 성공 처리
                 # **********************************************
-                st.success(f"{student_name}님, 회원가입이 완료되었습니다! 로그인해 주세요.")
-                
-                # 가상의 사용자 데이터 저장
-                fake_user_data = {
+                # 비밀번호를 포함하여 Mock 데이터 저장 (로그인 시 검증용)
+                st.session_state.mock_user = {
                     'email': email,
+                    'password': password, # Mock 검증을 위해 임시 저장
                     'schoolName': school_name,
                     'classNumber': class_number,
                     'studentName': student_name,
                     'birthDate': birth_date.strftime("%Y-%m-%d")
                 }
-                st.session_state.temp_signup_data = fake_user_data
+                
+                st.success(f"{student_name}님, 회원가입이 완료되었습니다! 이제 이 정보로 로그인해 주세요.")
                 
                 # 페이지 전환
                 navigate(PAGE_LOGIN)
