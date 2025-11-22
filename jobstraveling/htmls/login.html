@@ -32,19 +32,7 @@
         }
         
         // --- [Firebase 설정 정보 직접 입력 안내] ---
-        /*
-        // 만약 [Firebase 설정 정보가 누락되었습니다.] 오류가 계속 발생하면, 
-        // 아래 주석을 풀고 사용자님의 실제 Firebase 프로젝트 설정을 입력하세요.
-        // **이 설정은 Firebase Console > 프로젝트 설정 > 일반 탭에서 찾을 수 있습니다.**
-        // firebaseConfig = {
-        //     apiKey: "YOUR_API_KEY",
-        //     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-        //     projectId: "YOUR_PROJECT_ID",
-        //     storageBucket: "YOUR_PROJECT_ID.appspot.com",
-        //     messagingSenderId: "SENDER_ID",
-        //     appId: "APP_ID"
-        // };
-        */
+        // (생략)
         // --- [Firebase 설정 정보 직접 입력 안내 끝] ---
 
 
@@ -66,8 +54,7 @@
 
         /**
          * 사용자 프로필 데이터를 Firestore에서 가져옵니다.
-         * @param {string} uid - Firebase Auth User ID
-         * @returns {Promise<object | null>} 사용자 프로필 데이터
+         * (생략)
          */
         async function fetchUserProfile(uid) {
             if (!db) return null;
@@ -115,22 +102,23 @@
                     messageDiv.textContent = '모의 로그인 성공! 홈 화면으로 이동합니다.';
                     messageDiv.classList.add('bg-green-100', 'text-green-700');
                     
-                    // Mock 데이터에서 비밀번호를 제거하고 사용자 데이터만 구성
                     const userData = { ...MOCK_USER_DATA };
                     delete userData.password;
                     
-                    // <<<<<<<<< 이 부분이 핵심 수정입니다 >>>>>>>>>
-                    // 모의 로그인 성공 시 Streamlit에 LOGIN_SUCCESS 이벤트를 전송하여 페이지 전환을 요청합니다.
-                    postMessageToParent('LOGIN_SUCCESS', { userData: userData });
-                    // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                    // <<<<<<<<< 핵심 수정: setTimeout으로 지연 후 페이지 전환 요청 >>>>>>>>>
+                    console.log("Mock Login Success. Requesting page transition in 500ms.");
+                    setTimeout(() => {
+                        postMessageToParent('LOGIN_SUCCESS', { userData: userData });
+                    }, 500); 
+                    // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                     return; // 모의 로그인에 성공했으므로 실제 Firebase 로그인 시도는 하지 않습니다.
                 }
             }
             // ----------------------------------------------------
             // REAL FIREBASE LOGIN ATTEMPT (Mock 실패 시에만 시도)
+            // (생략)
             // ----------------------------------------------------
 
-            // Mock 로그인도 실패했고, Firebase 초기화도 안 됐다면 실제 로그인 시도 불가
             if (!auth) {
                  messageDiv.textContent = 'Firebase 초기화 문제로 실제 로그인 시도 불가.';
                  messageDiv.classList.add('bg-red-100', 'text-red-700');
@@ -210,10 +198,8 @@
                     onAuthStateChanged(auth, (user) => {
                         if (user) {
                             userId = user.uid;
-                            // console.log("Firebase Auth Ready. Current User ID:", userId);
                         } else {
                             userId = null;
-                            // console.log("Firebase Auth Ready. No user signed in.");
                         }
                     });
 
