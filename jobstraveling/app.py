@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
-import json # JSON 모듈 추가: Mock 데이터를 HTML로 전달하기 위해 필요합니다.
+import json 
 from datetime import date, datetime 
 
 # --- 1. 환경 설정 및 세션 상태 초기화 ---
@@ -18,20 +18,18 @@ if 'current_page' not in st.session_state:
 if 'user_data' not in st.session_state:
     st.session_state.user_data = None # 로그인한 사용자 정보
 if 'is_auth_ready' not in st.session_state:
-    st.session_state.is_auth_ready = False # Firebase 초기화 상태 (현재는 우회)
+    st.session_state.is_auth_ready = False 
 if 'mock_user' not in st.session_state:
     st.session_state.mock_user = None # 모의 로그인 데이터를 저장하는 세션 상태 추가
 
 # --- 2. HTML 파일 로드 함수 (경로 오류 수정 완료) ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
-    # 현재 실행 파일(app.py)의 디렉토리를 기준으로 'htmls' 폴더 내의 파일을 찾습니다.
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'htmls', file_name)
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # 오류 메시지에 정확한 파일 경로를 표시하여 디버깅을 돕습니다.
         st.error(f"HTML 파일을 찾을 수 없습니다. 경로를 확인해주세요: {file_path}")
         return ""
 
@@ -53,7 +51,9 @@ def handle_component_event(component_value):
                 navigate(target_page)
         
         elif event_type == 'LOGIN_SUCCESS':
+            # 로그인 성공 이벤트 수신 시 홈 페이지로 이동합니다.
             st.session_state.user_data = payload.get('userData')
+            # st.rerun()을 포함하는 navigate 함수 호출
             navigate(PAGE_HOME)
 
         elif event_type == 'SIGNUP_SUCCESS':
@@ -68,7 +68,6 @@ def render_login_page():
     
     # Mock 사용자 데이터 준비
     mock_data = st.session_state.get('mock_user', None)
-    # Python 객체를 JSON 문자열로 변환하여 JavaScript로 전달
     mock_user_json = json.dumps(mock_data) if mock_data else 'null'
     
     # HTML 파일을 읽어 컴포넌트로 렌더링
@@ -76,7 +75,6 @@ def render_login_page():
     
     if html_content:
         # ** Mock 데이터 주입 **
-        # login.html에 있는 '// MOCK_USER_PLACEHOLDER'를 실제 데이터로 교체합니다.
         html_content = html_content.replace(
             '// MOCK_USER_PLACEHOLDER',
             f'const MOCK_USER_DATA = {mock_user_json};'
@@ -86,9 +84,17 @@ def render_login_page():
             html_content,
             height=500,
             scrolling=True,
+            # Streamlit이 HTML 컴포넌트의 반환 값을 명시적으로 기다리도록 설정
+            # 이는 커스텀 컴포넌트가 Python으로 데이터를 보낼 때 안정성을 높이는 데 도움이 됩니다.
         )
-        if component_value is not None:
+        
+        # <<<<<<<<< 핵심 수정: HTML 컴포넌트의 반환 값을 확인하고 처리 >>>>>>>>>
+        # Streamlit은 HTML의 postMessage를 받으면 이 값을 반환합니다.
+        if component_value is not None and isinstance(component_value, dict):
+            # component_value가 딕셔너리 형태일 때만 이벤트 처리 함수 호출
             handle_component_event(component_value)
+        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            
     else:
         st.info("HTML 파일을 로드하지 못했습니다. 위의 에러 메시지를 확인해주세요.")
     
@@ -111,7 +117,6 @@ def render_signup_page():
     with st.form("signup_form"):
         st.write("사용자 정보를 입력해주세요.")
         
-        # 레이블 수정: '아이디 (ID)' -> '이메일 주소'
         email = st.text_input("이메일 주소", key="signup_email")
         password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
         st.markdown("---")
@@ -140,13 +145,10 @@ def render_signup_page():
             elif birth_date < min_date or birth_date > today:
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
-                # **********************************************
                 # Mock 데이터 저장 및 성공 처리
-                # **********************************************
-                # 비밀번호를 포함하여 Mock 데이터 저장 (로그인 시 검증용)
                 st.session_state.mock_user = {
                     'email': email,
-                    'password': password, # Mock 검증을 위해 임시 저장
+                    'password': password, 
                     'schoolName': school_name,
                     'classNumber': class_number,
                     'studentName': student_name,
