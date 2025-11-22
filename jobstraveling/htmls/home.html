@@ -3,171 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>진로 탐색 홈</title>
+    <title>잡스트레블링 홈</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-
-        setLogLevel('Debug');
-        
-        let auth;
-        let db;
-        let userId;
-        let userProfile = {};
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const app = initializeApp(window.firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                onAuthStateChanged(auth, async (user) => {
-                    if (user && user.isAnonymous === false) {
-                        userId = user.uid;
-                        document.getElementById('user-id-display').textContent = userId;
-                        
-                        // 1. 사용자 프로필 로드 (회원가입 시 입력된 학교 정보)
-                        await loadUserProfile(userId);
-
-                        // 2. 프로그램 목록 로드 (샘플)
-                        await loadPrograms();
-
-                    } else {
-                        // 사용자가 로그아웃되었거나 익명 사용자일 경우 로그인 페이지로 강제 이동
-                        sendToStreamlit('LOGOUT_SUCCESS');
-                    }
-                });
-            } catch (error) {
-                console.error("Firebase 초기화 또는 인증 오류:", error);
-                sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
-            }
-        });
-
-        async function loadUserProfile(uid) {
-            const docRef = doc(db, "artifacts", window.appId, "users", uid, "profile", "data");
-            try {
-                const docSnap = await getDoc(docRef);
-
-                if (docSnap.exists()) {
-                    userProfile = docSnap.data();
-                    document.getElementById('welcome-message').textContent = 
-                        `${userProfile.schoolName} ${userProfile.grade} 학생 환영합니다!`;
-                } else {
-                    document.getElementById('welcome-message').textContent = `환영합니다! (프로필 데이터 없음)`;
-                }
-            } catch (error) {
-                console.error("사용자 프로필 로드 오류:", error);
-            }
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
         }
-
-        async function loadPrograms() {
-            const programsContainer = document.getElementById('programs-list');
-            programsContainer.innerHTML = '<p class="text-gray-500">진로 프로그램 데이터를 로드하는 중...</p>';
-
-            // Firestore 샘플 데이터 로드 (공개 데이터 컬렉션 경로 사용)
-            // 실제 구현 시 'programs' 컬렉션에 데이터가 있어야 합니다.
-            const programsColRef = collection(db, "artifacts", window.appId, "public", "data", "programs");
-            
-            // 🚨 실제로는 여기에 학교 정보나 관심사에 기반한 쿼리가 추가됩니다.
-            try {
-                const q = query(programsColRef);
-                const querySnapshot = await getDocs(q);
-                
-                let programHtml = '';
-                if (querySnapshot.empty) {
-                    programHtml = '<p class="text-gray-500 p-4 bg-yellow-50 rounded-lg">현재 등록된 진로 프로그램이 없습니다.</p>';
-                } else {
-                    querySnapshot.forEach((doc) => {
-                        const data = doc.data();
-                        programHtml += `
-                            <div class="p-4 border-b hover:bg-gray-50 transition duration-150">
-                                <h4 class="font-semibold text-blue-600">${data.title || '제목 없음'}</h4>
-                                <p class="text-sm text-gray-500">${data.location || '위치 정보 없음'} | ${data.date || '날짜 미정'}</p>
-                                <button class="mt-2 text-xs text-indigo-500 hover:text-indigo-700">자세히 보기 &gt;</button>
-                            </div>
-                        `;
-                    });
-                }
-                programsContainer.innerHTML = programHtml;
-
-            } catch (error) {
-                console.error("프로그램 목록 로드 오류:", error);
-                programsContainer.innerHTML = `<p class="text-red-500 p-4 bg-red-100 rounded-lg">프로그램 데이터 로드 중 오류 발생: ${error.message}</p>`;
-            }
+        .main-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
         }
-
-        window.logout = async () => {
-            try {
-                await signOut(auth);
-                // Streamlit에 로그아웃 성공 이벤트 전송
-                sendToStreamlit('LOGOUT_SUCCESS');
-            } catch (error) {
-                console.error("로그아웃 오류:", error);
-                // alert 대신 메시지 박스 사용 필요
-                sendToStreamlit('AUTH_ERROR', { message: `로그아웃 실패: ${error.message}` });
-            }
-        };
-    </script>
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            padding: 24px;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-8" style="font-family: 'Inter', sans-serif;">
-    <div class="w-full max-w-6xl mx-auto bg-white p-10 rounded-xl shadow-2xl space-y-8">
-        <!-- 헤더 및 로그아웃 -->
-        <div class="flex justify-between items-center pb-4 border-b">
-            <div>
-                <h1 class="text-3xl font-extrabold text-gray-900">💼 잡스트레블링 (Job-Trekking)</h1>
-                <p id="welcome-message" class="text-xl text-gray-600 mt-1">로그인 정보 확인 중...</p>
-                <p class="text-xs text-gray-400 mt-1">사용자 ID: <span id="user-id-display">N/A</span></p>
+<body class="bg-gray-50">
+
+    <div class="main-container">
+        <!-- 환영 배너 -->
+        <header class="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6 rounded-xl shadow-lg mb-8">
+            <h1 class="text-3xl font-bold mb-1">잡스트레블링 (Job-Trekking)</h1>
+            <p class="text-lg opacity-90">미래 직업 탐색의 여정을 시작하세요, {{USER_NAME}}님!</p>
+        </header>
+
+        <!-- 주요 섹션 그리드 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <!-- 1. 오늘의 추천 직업 -->
+            <div class="card bg-yellow-50 border-t-4 border-yellow-500">
+                <div class="flex items-center space-x-3 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6"/>
+                    </svg>
+                    <h2 class="text-xl font-semibold text-gray-800">오늘의 추천 직업</h2>
+                </div>
+                <p class="text-gray-600 mb-4">AI 기반의 맞춤형 추천 직업을 확인해보세요.</p>
+                <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+                    <li>데이터 사이언티스트</li>
+                    <li>친환경 건축가</li>
+                    <li>웹 3.0 개발자</li>
+                </ul>
+                <button class="mt-4 w-full bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150">자세히 보기</button>
             </div>
-            <button onclick="logout()" 
-                    class="px-5 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 shadow-md">
-                로그아웃
-            </button>
+
+            <!-- 2. 내 진로 로드맵 -->
+            <div class="card bg-green-50 border-t-4 border-green-500">
+                <div class="flex items-center space-x-3 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.727A8 8 0 016.343 3.273L15.3 12.23l2.357 4.497z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18V6"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l7.5-7.5m0 0l7.5 7.5M12 12v6"/>
+                    </svg>
+                    <h2 class="text-xl font-semibold text-gray-800">내 진로 로드맵</h2>
+                </div>
+                <p class="text-gray-600 mb-4">현재 학년 및 관심사에 따른 추천 학습 경로입니다.</p>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span>1단계: 기본 역량 학습</span>
+                        <span class="text-green-600 font-medium">100% 완료</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>2단계: 프로젝트 경험</span>
+                        <span class="text-orange-500 font-medium">50% 진행 중</span>
+                    </div>
+                </div>
+                <button class="mt-4 w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150">로드맵 관리</button>
+            </div>
+
+            <!-- 3. 최신 채용 공고 (Mock) -->
+            <div class="card bg-blue-50 border-t-4 border-blue-500">
+                <div class="flex items-center space-x-3 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 16v.01"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12v3a5 5 0 01-5 5H9a5 5 0 01-5-5v-3m12-3a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <h2 class="text-xl font-semibold text-gray-800">취업 정보</h2>
+                </div>
+                <ul class="space-y-3 text-sm">
+                    <li class="p-2 border border-gray-200 rounded-md hover:bg-gray-100 transition duration-100 cursor-pointer">
+                        <p class="font-medium text-blue-700">인공지능 교육 콘텐츠 개발자</p>
+                        <p class="text-gray-500 text-xs">**[IT/스타트업]** 마감: D-10</p>
+                    </li>
+                    <li class="p-2 border border-gray-200 rounded-md hover:bg-gray-100 transition duration-100 cursor-pointer">
+                        <p class="font-medium text-blue-700">미래 에너지 설계 인턴</p>
+                        <p class="text-gray-500 text-xs">**[친환경/에너지]** 마감: D-25</p>
+                    </li>
+                </ul>
+                <button class="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150">전체 공고 보기</button>
+            </div>
+        </div>
+        
+        <!-- 하단 보조 정보 (사용자 프로필 카드) -->
+        <div class="card mt-8 border-t-4 border-gray-400">
+            <h3 class="text-xl font-semibold mb-3 text-gray-700">내 정보 요약</h3>
+            <div class="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                <div>
+                    <p class="font-medium text-gray-800">이름:</p>
+                    <p>{{USER_NAME}}</p>
+                </div>
+                <div>
+                    <p class="font-medium text-gray-800">학교/학년:</p>
+                    <p>가상고등학교 301반 (Mock)</p>
+                </div>
+                <div>
+                    <p class="font-medium text-gray-800">최근 활동:</p>
+                    <p>직업 적성 검사 완료</p>
+                </div>
+                <div>
+                    <p class="font-medium text-gray-800">적립 포인트:</p>
+                    <p>1,200 P</p>
+                </div>
+            </div>
         </div>
 
-        <!-- 지도 및 목록 섹션 -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- 1. 지도 (Placeholder) -->
-            <div class="lg:col-span-2 bg-gray-200 h-96 rounded-xl shadow-inner flex items-center justify-center border-4 border-gray-300">
-                <div class="text-center text-gray-600 p-4">
-                    <div class="text-4xl mb-2">🗺️</div>
-                    <p class="font-bold">지도 기반 진로 탐색 영역</p>
-                    <p class="text-sm">실제 구현 시 이 위치에 지도(예: Kakao/Naver Map)가 표시됩니다.</p>
-                </div>
-            </div>
-
-            <!-- 2. 프로그램 목록 -->
-            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-xl border border-gray-100">
-                <h3 class="text-2xl font-bold text-blue-700 mb-4 border-b pb-2">나에게 맞는 추천 프로그램</h3>
-                <div id="programs-list" class="space-y-2 max-h-[300px] overflow-y-auto">
-                    <!-- 프로그램 목록이 여기에 로드됩니다. -->
-                </div>
-                <button class="w-full mt-4 py-2 bg-blue-100 text-blue-600 font-medium rounded-lg hover:bg-blue-200 transition duration-150">
-                    전체 프로그램 더 보기
-                </button>
-            </div>
-        </div>
-
-        <!-- 정보 제공 섹션 (추가 기능) -->
-        <div class="pt-4 border-t">
-            <h3 class="text-2xl font-bold text-gray-800 mb-4">📢 잡스트레블링 추천 가이드</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="p-4 bg-indigo-50 rounded-lg shadow-md border border-indigo-200">
-                    <h4 class="font-bold text-indigo-700">학교 기반 맞춤 진로</h4>
-                    <p class="text-sm text-indigo-600">등록된 학교/학년 정보를 바탕으로 가까운 지역의 진로 활동을 추천합니다.</p>
-                </div>
-                <div class="p-4 bg-yellow-50 rounded-lg shadow-md border border-yellow-200">
-                    <h4 class="font-bold text-yellow-700">멘토링/탐방 기록</h4>
-                    <p class="text-sm text-yellow-600">진로 탐방 후기 및 멘토링 기록을 저장하고 공유할 수 있습니다.</p>
-                </div>
-                <div class="p-4 bg-green-50 rounded-lg shadow-md border border-green-200">
-                    <h4 class="font-bold text-green-700">공지 및 알림</h4>
-                    <p class="text-sm text-green-600">새로운 프로그램 등록, 신청 마감 알림 등을 확인할 수 있습니다.</p>
-                </div>
-            </div>
-        </div>
     </div>
 </body>
 </html>
