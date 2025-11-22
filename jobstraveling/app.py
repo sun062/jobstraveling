@@ -157,14 +157,14 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         </script>
         """
         
-        # Streamlit HTML 컴포넌트 렌더링 (key 인수를 제거하고 try-except로 안정성 강화)
+        # Streamlit HTML 컴포넌트 렌더링 (return_value 인수를 제거하고 try-except로 안정성 강화)
         try:
-            # key 인수를 제거합니다. (line 165)
+            # key와 return_value 인수를 모두 제거합니다.
             component_value = st.components.v1.html(
                 js_variables + html_content,
                 height=800, 
                 scrolling=True, 
-                return_value=True
+                # return_value=True 인수를 제거했습니다.
             )
             
             # 반환된 값이 있으면 이벤트 처리 함수 호출
