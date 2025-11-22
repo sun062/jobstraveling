@@ -33,18 +33,27 @@
 
 
         document.addEventListener('DOMContentLoaded', async () => {
+            let firebaseConfig;
             try {
-                // window.firebaseConfig는 app.py에서 JSON.parse를 통해 주입됩니다.
-                if (typeof window.firebaseConfig !== 'object' || Object.keys(window.firebaseConfig).length === 0) {
-                    throw new Error("Firebase Config is missing or invalid.");
+                // app.py에서 전달된 JSON 문자열을 파싱합니다.
+                if (!window.firebaseConfigJsonString) {
+                    throw new Error("Firebase Config JSON string is not available on window object.");
                 }
+                
+                firebaseConfig = JSON.parse(window.firebaseConfigJsonString);
 
-                const app = initializeApp(window.firebaseConfig);
+                // 유효성 검사
+                if (typeof firebaseConfig !== 'object' || firebaseConfig === null || Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase Config is missing or invalid after parsing.");
+                }
+                
+                const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 window.db = getFirestore(app);
 
                 // 1. 초기 인증 시도 (Canvas 환경)
                 const initialAuthToken = window.initialAuthToken;
+                // 'None'은 Python None이 JSON.dumps를 통해 문자열화된 값입니다.
                 if (initialAuthToken && initialAuthToken !== 'None') {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
