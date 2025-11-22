@@ -8,7 +8,9 @@ import os
 
 # 앱 ID 및 Firebase 설정 (캔버스 환경 변수 사용)
 APP_ID = os.getenv('__app_id', 'job_trekking_app')
-FIREBASE_CONFIG = os.getenv('__firebase_config', '{}')
+# 🚨 사용자님의 Firebase 설정 JSON 문자열을 이 위치에 직접 붙여넣으세요.
+# 예시: FIREBASE_CONFIG = '{"apiKey": "...", "authDomain": "...", ...}'
+FIREBASE_CONFIG = '{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}' 
 INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
 
 # 페이지 이름 상수
@@ -498,3 +500,4 @@ with st.sidebar:
         navigate_to(PAGE_HOME)
     if st.button("로그인 페이지로 이동"):
         navigate_to(PAGE_LOGIN)
+
