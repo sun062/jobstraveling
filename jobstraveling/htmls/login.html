@@ -4,168 +4,313 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>로그인</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Streamlit 컴포넌트 라이브러리 로드 -->
-    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit-component-lib.js"></script>
-    <script>
-        // 전역 변수 및 함수 정의
+    <!-- Firebase SDK (Canvas에서 자동 주입되지만 명시적으로 포함) -->
+    <!-- Firestore, Auth 모듈을 사용합니다. -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        setLogLevel('Debug');
+
+        // 전역 변수 설정 (캔버스 환경에서 제공)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app;
+        let db;
         let auth;
-        let authReady = false;
-        
-        // Streamlit으로 이벤트와 데이터를 다시 보내는 함수 (app.py에서 주입)
-        window.sendToStreamlit = function(eventType, data = {}) {
-            if (typeof Streamlit !== 'undefined' && Streamlit.setComponentValue) {
-                Streamlit.setComponentValue({
-                    event: eventType,
-                    data: data,
-                    timestamp: Date.now() 
-                });
-            } else {
-                console.error("Streamlit 객체가 준비되지 않아 이벤트를 보낼 수 없습니다:", eventType, data);
-            }
-        };
+        let userId = null;
 
-        // *************** Firebase 초기화 함수: 모듈 임포트를 함수 내부로 이동 ***************
-        window.initFirebase = async function() {
-            // 모듈 임포트 (함수 호출 시점에 로딩되도록 지연)
-            const firebase = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
-            const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const { initializeApp, setLogLevel } = firebase;
-            const { getAuth, signInWithEmailAndPassword, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = authModule;
+        /**
+         * Streamlit 부모에게 메시지를 전송하는 유틸리티 함수
+         * @param {string} type - 이벤트 유형 (예: 'NAVIGATE_TO', 'LOGIN_SUCCESS')
+         * @param {object} payload - 전달할 데이터
+         */
+        function postMessageToParent(type, payload = {}) {
+            // console.log("PostMessage:", type, payload);
+            window.parent.postMessage({ type, payload }, '*');
+        }
+
+        /**
+         * 사용자 프로필 데이터를 Firestore에서 가져옵니다.
+         * @param {string} uid - Firebase Auth User ID
+         * @returns {Promise<object | null>} 사용자 프로필 데이터
+         */
+        async function fetchUserProfile(uid) {
+            if (!db) return null;
             
-            // 디버그 로깅 활성화
-            setLogLevel('Debug');
-            
-            let firebaseConfig;
+            // 데이터베이스 보안 규칙에 따른 경로 사용
+            const docPath = `/artifacts/${appId}/users/${uid}/userProfile/profile`;
+            const userProfileRef = doc(db, docPath);
+
             try {
-                if (!window.firebaseConfigJsonString) {
-                    throw new Error("Firebase Config JSON string is not available.");
-                }
-                
-                firebaseConfig = JSON.parse(window.firebaseConfigJsonString);
-                
-                if (typeof firebaseConfig !== 'object' || firebaseConfig === null || Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase Config is missing or invalid after parsing.");
-                }
-                
-                const app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                authReady = true;
-
-                // 초기 인증 처리 (선택 사항: 익명 로그인 또는 커스텀 토큰)
-                if (window.initialAuthToken) {
-                    await signInWithCustomToken(auth, window.initialAuthToken);
+                const docSnap = await getDoc(userProfileRef);
+                if (docSnap.exists()) {
+                    return docSnap.data();
                 } else {
-                    await signInAnonymously(auth);
+                    console.warn("Firestore에 사용자 프로필 데이터가 없습니다.");
+                    return { uid: uid, email: auth.currentUser.email || 'N/A' }; // 최소 정보 반환
                 }
-                
             } catch (error) {
-                console.error("Firebase 초기화 또는 인증 오류:", error);
-                displayMessage(`시스템 오류: 인증 초기화 실패. ${error.message}`, 'error');
+                console.error("Firestore에서 사용자 프로필을 가져오는 중 오류 발생:", error);
+                return null;
             }
         }
-        
-        // *************** Streamlit 로딩 이벤트 리스너: initFirebase 호출 ***************
-        if (typeof Streamlit !== 'undefined' && Streamlit.events) {
-             Streamlit.events.addEventListener(Streamlit.events.LOADED, function() {
-                Streamlit.setFrameHeight(document.documentElement.scrollHeight);
-                window.initFirebase(); 
-            });
-        }
-        
-        // 사용자 로그인 함수
-        window.login = async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+
+        /**
+         * 이메일/비밀번호로 로그인 처리를 수행합니다.
+         */
+        async function handleLogin() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const messageDiv = document.getElementById('message');
             
+            messageDiv.textContent = '';
+            messageDiv.className = 'text-center p-2 rounded-md';
+
             if (!email || !password) {
-                displayMessage("이메일과 비밀번호를 모두 입력해주세요.", 'error');
+                messageDiv.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
+                messageDiv.classList.add('bg-red-100', 'text-red-700');
                 return;
             }
 
             try {
-                if (!authReady) {
-                    displayMessage("인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", 'error');
-                    return;
-                }
-                
+                // 1. 이메일/비밀번호로 로그인 시도
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
                 
-                // 로그인 성공 이벤트를 Streamlit으로 전송
-                sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid, email: user.email });
-                
-            } catch (error) {
-                console.error("로그인 오류:", error);
-                const errorMessage = getFriendlyErrorMessage(error.code || error.message);
-                displayMessage(`로그인 실패: ${errorMessage}`, 'error');
-                sendToStreamlit('AUTH_ERROR', { message: `로그인 실패: ${errorMessage}` });
-            }
-        };
+                // 2. 로그인 성공 후 사용자 프로필 정보 가져오기
+                const profileData = await fetchUserProfile(user.uid);
 
-        // Firebase 오류 코드를 사용자 친화적인 메시지로 변환
-        function getFriendlyErrorMessage(errorCode) {
-            switch (errorCode) {
-                case 'auth/invalid-credential':
-                case 'auth/wrong-password':
-                case 'auth/user-not-found':
-                    return '이메일 또는 비밀번호가 올바르지 않습니다.';
-                case 'auth/invalid-email':
-                    return '유효하지 않은 이메일 형식입니다.';
-                default:
-                    if (typeof errorCode === 'string' && (errorCode.includes("Error:") || errorCode.includes("Firebase:"))) {
-                        return errorCode.split("Error: ")[1] || "알 수 없는 오류가 발생했습니다.";
+                if (profileData) {
+                    messageDiv.textContent = '로그인 성공! 홈 화면으로 이동합니다.';
+                    messageDiv.classList.add('bg-green-100', 'text-green-700');
+
+                    // 3. Streamlit으로 사용자 정보와 함께 성공 메시지 전송
+                    postMessageToParent('LOGIN_SUCCESS', {
+                        userData: profileData
+                    });
+
+                } else {
+                    // 프로필은 없지만 Auth 로그인은 성공한 경우 (비정상 케이스)
+                    messageDiv.textContent = '로그인 성공, 하지만 프로필을 찾을 수 없습니다.';
+                    messageDiv.classList.add('bg-orange-100', 'text-orange-700');
+                    
+                    // 최소 정보만 보내고 홈으로 이동
+                     postMessageToParent('LOGIN_SUCCESS', {
+                        userData: { uid: user.uid, email: user.email || 'N/A', studentName: '사용자' }
+                    });
+                }
+
+            } catch (error) {
+                console.error("로그인 실패:", error.code, error.message);
+                let errorMessage;
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                    case 'auth/wrong-password':
+                    case 'auth/invalid-credential':
+                        errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage = '유효하지 않은 이메일 형식입니다.';
+                        break;
+                    case 'auth/too-many-requests':
+                        errorMessage = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+                        break;
+                    default:
+                        errorMessage = '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+                }
+                messageDiv.textContent = errorMessage;
+                messageDiv.classList.add('bg-red-100', 'text-red-700');
+            }
+        }
+
+        /**
+         * Firebase를 초기화하고 Custom Token으로 인증합니다.
+         */
+        async function initializeFirebaseAndAuth() {
+             if (firebaseConfig) {
+                try {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    
+                    // Custom Auth Token으로 로그인 시도
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        // Custom Token이 없으면 익명 로그인 시도
+                        await signInAnonymously(auth);
                     }
-                    return `알 수 없는 오류가 발생했습니다. (Code: ${errorCode})`;
-            }
-        }
-        
-        function displayMessage(message, type) {
-            const messageBox = document.getElementById('message-box');
-            messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-600', 'bg-green-100', 'text-green-600', 'border', 'border-red-300', 'border-green-300');
-            
-            if (type === 'error') {
-                messageBox.classList.add('bg-red-100', 'text-red-600', 'border', 'border-red-300');
+                    
+                    // 인증 상태 변경 리스너 설정
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            userId = user.uid;
+                            // console.log("Firebase Auth Ready. Current User ID:", userId);
+                        } else {
+                            userId = null;
+                            // console.log("Firebase Auth Ready. No user signed in.");
+                        }
+                    });
+
+                    // 로그인 버튼 활성화
+                    document.getElementById('login-button').disabled = false;
+                    document.getElementById('message').textContent = '로그인 준비 완료.';
+                    document.getElementById('message').classList.add('bg-blue-100', 'text-blue-700');
+
+                } catch (error) {
+                    console.error("Firebase 초기화 또는 인증 오류:", error);
+                    document.getElementById('message').textContent = '서비스 초기화에 실패했습니다. (콘솔 확인)';
+                    document.getElementById('message').classList.add('bg-red-100', 'text-red-700');
+                }
             } else {
-                messageBox.classList.add('bg-green-100', 'text-green-600', 'border', 'border-green-300');
+                 console.error("Firebase 설정 정보가 없습니다.");
+                 document.getElementById('message').textContent = 'Firebase 설정 정보가 누락되었습니다.';
+                 document.getElementById('message').classList.add('bg-red-100', 'text-red-700');
             }
         }
-    </script>
-</head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" style="font-family: 'Inter', sans-serif;">
-    <div class="w-full max-w-sm bg-white p-8 rounded-xl shadow-2xl">
-        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">로그인</h2>
-        <!-- 오류/성공 메시지 박스 -->
-        <div id="message-box" class="mb-4 p-3 rounded-lg text-sm font-medium hidden"></div>
-        
-        <div class="space-y-4">
-            <div>
-                <label for="email" class="block text-sm font-medium text-gray-700">이메일 주소</label>
-                <input id="email" type="email" placeholder="job@trekking.com" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-            </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-700">비밀번호</label>
-                <input id="password" type="password" placeholder="********" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-            </div>
+
+        // DOM 로드 후 초기화 및 이벤트 리스너 연결
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeFirebaseAndAuth();
+
+            // 로그인 버튼 이벤트 리스너
+            const loginButton = document.getElementById('login-button');
+            if (loginButton) {
+                loginButton.addEventListener('click', handleLogin);
+            }
+
+            // 회원가입 버튼 이벤트 리스너 (Streamlit 페이지 전환 요청)
+            const signupButton = document.getElementById('signup-button');
+            if (signupButton) {
+                signupButton.addEventListener('click', () => {
+                    postMessageToParent('NAVIGATE_TO', { page: 'signup' });
+                });
+            }
             
-            <button onclick="login()" 
-                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200 ease-in-out transform hover:scale-[1.01]">
+             // 엔터 키 입력 시 로그인 시도
+             document.getElementById('password').addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault(); // 기본 Enter 동작(폼 제출) 방지
+                    handleLogin();
+                }
+            });
+        });
+
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .login-container {
+            max-width: 400px;
+            width: 90%;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            border-top: 5px solid #3b82f6; /* Blue border for design */
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input[type="email"]:focus, input[type="password"]:focus {
+            border-color: #3b82f6;
+            outline: none;
+        }
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn-primary:active {
+            transform: scale(0.99);
+        }
+        .btn-primary:disabled {
+            background-color: #93c5fd;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            width: 100%;
+            padding: 12px;
+            background-color: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: 10px;
+        }
+        .btn-secondary:hover {
+            background-color: #e5e7eb;
+        }
+        .message-box {
+             min-height: 40px;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="login-container">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-6">Job-Trekking 로그인</h2>
+        
+        <div id="message" class="message-box text-center p-2 rounded-md bg-gray-100 text-gray-600">
+             로그인 시스템 초기화 중...
+        </div>
+
+        <form id="login-form">
+            <label for="email" class="block text-sm font-medium text-gray-700 mb-1">이메일 주소</label>
+            <input type="email" id="email" placeholder="school@email.com" required>
+
+            <label for="password" class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+            <input type="password" id="password" placeholder="비밀번호 (6자 이상)" required>
+
+            <button type="button" id="login-button" class="btn-primary" disabled>
                 로그인
             </button>
+        </form>
+
+        <div class="text-center my-4 text-gray-500">
+            또는
         </div>
-        
-        <!-- 🚨🚨🚨 HTML 기반의 회원가입 링크를 제거했습니다. 사이드바 버튼을 사용해주세요. 🚨🚨🚨 -->
-        <!-- 
-        <div class="mt-6 text-center text-sm">
-            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'signup' }); return false;" 
-               class="font-medium text-indigo-600 hover:text-indigo-500 transition duration-150">
-                회원가입
-            </a>
-        </div>
-        -->
+
+        <button id="signup-button" class="btn-secondary">
+            회원가입
+        </button>
     </div>
+
 </body>
 </html>
