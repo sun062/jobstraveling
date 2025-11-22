@@ -66,6 +66,7 @@ def render_login_page():
     # HTML 파일을 읽어 컴포넌트로 렌더링
     html_content = read_html_file('login.html')
     if html_content:
+        # Streamlit 컴포넌트 렌더링 시 높이와 스크롤 설정
         component_value = components.html(
             html_content,
             height=500,
@@ -85,19 +86,18 @@ def render_signup_page():
     """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (UI, 유효성 검사 적용)"""
     st.title("회원가입")
 
-    # 오늘 날짜
+    # 오늘 날짜와 최소 날짜 설정 (2007년 1월 1일)
     today = date.today()
-    # 최소 생년월일 (2007년 1월 1일)
     min_date = date(2007, 1, 1)
     
-    # 기본 생년월일 설정
+    # 기본 생년월일 설정 (2007년 1월 1일)
     default_birth_date = min_date
 
     with st.form("signup_form"):
         st.write("사용자 정보를 입력해주세요.")
         
-        # 이메일 레이블 수정 완료
-        email = st.text_input("이메일 (ID)", key="signup_email")
+        # 레이블 수정: '아이디 (ID)' -> '이메일 주소'
+        email = st.text_input("이메일 주소", key="signup_email")
         password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
         st.markdown("---")
         school_name = st.text_input("학교 이름", key="signup_school")
