@@ -11,18 +11,34 @@
         import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Streamlit 컴포넌트 API 로드가 필요하므로 항상 포함
-        // Streamlit.setComponentValue() 호출 전에 Streamlit 객체가 존재한다고 가정합니다.
-        
         // 디버그 로깅 활성화
         setLogLevel('Debug');
         
         let auth;
         let authReady = false;
 
+        // Streamlit으로 이벤트와 데이터를 다시 보내는 함수 (app.py에서 주입되지만, JS에서 안전성을 위해 재정의)
+        window.sendToStreamlit = function(eventType, data = {}) {
+            // Streamlit 객체가 실제로 정의되어 있고, setComponentValue 메서드가 있는지 확인
+            if (typeof Streamlit !== 'undefined' && Streamlit.setComponentValue) {
+                Streamlit.setComponentValue({
+                    event: eventType,
+                    data: data,
+                    timestamp: Date.now() 
+                });
+            } else {
+                console.error("Streamlit 객체가 준비되지 않아 이벤트를 보낼 수 없습니다:", eventType, data);
+            }
+        };
+
+
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 // window.firebaseConfig는 app.py에서 JSON.parse를 통해 주입됩니다.
+                if (typeof window.firebaseConfig !== 'object' || Object.keys(window.firebaseConfig).length === 0) {
+                    throw new Error("Firebase Config is missing or invalid.");
+                }
+
                 const app = initializeApp(window.firebaseConfig);
                 auth = getAuth(app);
                 window.db = getFirestore(app);
@@ -32,7 +48,6 @@
                 if (initialAuthToken && initialAuthToken !== 'None') {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
-                    // 토큰이 없으면 익명 로그인 시도 (필수)
                     await signInAnonymously(auth);
                 }
 
@@ -40,7 +55,6 @@
                 onAuthStateChanged(auth, (user) => {
                     if (!authReady) {
                         authReady = true;
-                        // 익명 사용자가 아닌 실제 로그인 사용자일 경우 홈으로 이동
                         if (user && user.isAnonymous === false) {
                              sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid });
                         }
@@ -49,8 +63,9 @@
                 
             } catch (error) {
                 console.error("Firebase 초기화 오류:", error);
-                // Firebase 초기화 오류는 Streamlit UI에도 표시
+                // HTML의 displayMessage 함수 대신, Streamlit UI에 오류를 전송
                 sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
+                // 혹시 모르니 HTML 내부에 로컬 메시지 표시 (Streamlit 통신 실패 대비)
                 displayMessage(`Firebase 초기화 실패: ${error.message}`, 'error');
             }
         });
@@ -60,7 +75,7 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const messageBox = document.getElementById('message-box');
-            messageBox.classList.add('hidden'); // 기존 메시지 숨기기
+            messageBox.classList.add('hidden'); 
             
             if (!email || !password) {
                 displayMessage("이메일과 비밀번호를 모두 입력해주세요.", 'error');
@@ -70,7 +85,6 @@
             try {
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
-                // Streamlit에 로그인 성공 이벤트 및 사용자 ID 전송
                 sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid, email: user.email });
             } catch (error) {
                 console.error("로그인 오류:", error);
