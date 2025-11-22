@@ -11,7 +11,7 @@
         // 전역 변수 및 함수 정의
         let auth;
         let authReady = false;
-
+        
         // Streamlit으로 이벤트와 데이터를 다시 보내는 함수 (app.py에서 주입)
         window.sendToStreamlit = function(eventType, data = {}) {
             if (typeof Streamlit !== 'undefined' && Streamlit.setComponentValue) {
@@ -30,65 +30,46 @@
             // 모듈 임포트 (함수 호출 시점에 로딩되도록 지연)
             const firebase = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
             const authModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-            const firestoreModule = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-            
             const { initializeApp, setLogLevel } = firebase;
-            const { getAuth, signInWithEmailAndPassword, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = authModule;
-            const { getFirestore } = firestoreModule;
+            const { getAuth, signInWithEmailAndPassword, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = authModule;
             
             // 디버그 로깅 활성화
             setLogLevel('Debug');
             
             let firebaseConfig;
             try {
-                // app.py에서 전달된 JSON 문자열을 파싱합니다.
                 if (!window.firebaseConfigJsonString) {
                     throw new Error("Firebase Config JSON string is not available.");
                 }
                 
                 firebaseConfig = JSON.parse(window.firebaseConfigJsonString);
-
-                // 유효성 검사
+                
                 if (typeof firebaseConfig !== 'object' || firebaseConfig === null || Object.keys(firebaseConfig).length === 0) {
                     throw new Error("Firebase Config is missing or invalid after parsing.");
                 }
                 
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
-                window.db = getFirestore(app); // 전역에서 Firestore 접근 가능하도록 설정
+                authReady = true;
 
-                // 1. 초기 인증 시도 (Canvas 환경)
-                const initialAuthToken = window.initialAuthToken;
-                if (initialAuthToken && initialAuthToken !== 'None') {
-                    await signInWithCustomToken(auth, initialAuthToken);
+                // 초기 인증 처리 (선택 사항: 익명 로그인 또는 커스텀 토큰)
+                if (window.initialAuthToken) {
+                    await signInWithCustomToken(auth, window.initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
-
-                // 2. 인증 상태 변화 감지 및 자동 로그인 처리
-                onAuthStateChanged(auth, (user) => {
-                    if (!authReady) {
-                        authReady = true;
-                        if (user && user.isAnonymous === false) {
-                             sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid });
-                        }
-                    }
-                });
                 
             } catch (error) {
-                console.error("Firebase 초기화 오류:", error);
-                sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
-                displayMessage(`Firebase 초기화 실패: ${error.message}`, 'error');
+                console.error("Firebase 초기화 또는 인증 오류:", error);
+                displayMessage(`시스템 오류: 인증 초기화 실패. ${error.message}`, 'error');
             }
         }
         
         // *************** Streamlit 로딩 이벤트 리스너: initFirebase 호출 ***************
-        // Streamlit 컴포넌트가 완전히 로드되고 준비되었을 때만 트리거됩니다.
         if (typeof Streamlit !== 'undefined' && Streamlit.events) {
              Streamlit.events.addEventListener(Streamlit.events.LOADED, function() {
-                // Streamlit 프레임 높이를 설정하고 Firebase 초기화를 시작합니다.
                 Streamlit.setFrameHeight(document.documentElement.scrollHeight);
-                window.initFirebase(); // 모듈 임포트 및 Firebase 초기화 시작
+                window.initFirebase(); 
             });
         }
         
@@ -96,8 +77,6 @@
         window.login = async () => {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const messageBox = document.getElementById('message-box');
-            messageBox.classList.add('hidden'); 
             
             if (!email || !password) {
                 displayMessage("이메일과 비밀번호를 모두 입력해주세요.", 'error');
@@ -105,13 +84,17 @@
             }
 
             try {
-                // auth 객체가 초기화되었는지 확인
-                if (!auth) {
-                    throw new Error("인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+                if (!authReady) {
+                    displayMessage("인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.", 'error');
+                    return;
                 }
+                
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
+                
+                // 로그인 성공 이벤트를 Streamlit으로 전송
                 sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid, email: user.email });
+                
             } catch (error) {
                 console.error("로그인 오류:", error);
                 const errorMessage = getFriendlyErrorMessage(error.code || error.message);
@@ -123,16 +106,13 @@
         // Firebase 오류 코드를 사용자 친화적인 메시지로 변환
         function getFriendlyErrorMessage(errorCode) {
             switch (errorCode) {
-                case 'auth/user-not-found':
-                    return '사용자 계정을 찾을 수 없습니다. 이메일을 확인해 주세요.';
+                case 'auth/invalid-credential':
                 case 'auth/wrong-password':
-                    return '비밀번호가 잘못되었습니다.';
+                case 'auth/user-not-found':
+                    return '이메일 또는 비밀번호가 올바르지 않습니다.';
                 case 'auth/invalid-email':
                     return '유효하지 않은 이메일 형식입니다.';
-                case '인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.':
-                    return errorCode;
                 default:
-                    // 코드 대신 메시지가 전달될 경우
                     if (typeof errorCode === 'string' && (errorCode.includes("Error:") || errorCode.includes("Firebase:"))) {
                         return errorCode.split("Error: ")[1] || "알 수 없는 오류가 발생했습니다.";
                     }
@@ -154,8 +134,8 @@
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" style="font-family: 'Inter', sans-serif;">
-    <div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl">
-        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">잡스트레블링 로그인</h2>
+    <div class="w-full max-w-sm bg-white p-8 rounded-xl shadow-2xl">
+        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">로그인</h2>
         <!-- 오류/성공 메시지 박스 -->
         <div id="message-box" class="mb-4 p-3 rounded-lg text-sm font-medium hidden"></div>
         
@@ -177,10 +157,15 @@
             </button>
         </div>
         
-        <div class="mt-6 flex items-center justify-center space-x-4 text-sm">
-            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'signup' })" 
-               class="font-medium text-blue-600 hover:text-blue-500 transition duration-150">
+        <div class="mt-6 text-center text-sm">
+            <!-- 🚨 이 부분을 수정하여 Streamlit으로 'signup' 페이지로 이동하는 이벤트를 보냅니다. -->
+            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'signup' }); return false;" 
+               class="font-medium text-indigo-600 hover:text-indigo-500 transition duration-150">
                 회원가입
+            </a>
+            <span class="text-gray-400 mx-2">|</span>
+            <a href="#" class="font-medium text-gray-600 hover:text-gray-500 transition duration-150">
+                비밀번호 찾기
             </a>
         </div>
     </div>
