@@ -1,214 +1,148 @@
+# jobstraveling/app.py
 import streamlit as st
-from streamlit.components.v1 import html
-import os
 import json
+import os
+import pathlib
 import time
 
-# --- 1. 환경 설정 및 상수 ---
+# --- 환경 변수 로드 (더미 값) ---
+# __app_id와 __firebase_config는 Canvas 환경에서 자동으로 제공됩니다.
+# 이 코드는 Canvas 외부 실행 환경을 위한 더미 값입니다.
+# 실제 Canvas 환경에서는 __app_id와 __firebase_config 변수가 사용됩니다.
+appId = "default-app-id" 
+firebaseConfig = os.environ.get('FIREBASE_CONFIG')
 
-# Canvas 환경 변수를 사용하여 앱 ID 및 인증 토큰 로드
-APP_ID = os.getenv('__app_id', 'job_trekking_app')
-INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
+if firebaseConfig:
+    try:
+        FIREBASE_CONFIG_JSON_STRING = firebaseConfig
+    except Exception:
+        FIREBASE_CONFIG_JSON_STRING = '{"apiKey": "DUMMY_API_KEY", "authDomain": "DUMMY_AUTH_DOMAIN", "projectId": "DUMMY_PROJECT_ID", "storageBucket": "DUMMY_STORAGE_BUCKET", "messagingSenderId": "DUMMY_MESSAGING_SENDER_ID", "appId": "DUMMY_APP_ID"}'
+else:
+    # Firebase 설정이 없는 경우를 대비한 안전한 JSON 문자열
+    FIREBASE_CONFIG_JSON_STRING = '{"apiKey": "DUMMY_API_KEY", "authDomain": "DUMMY_AUTH_DOMAIN", "projectId": "DUMMY_PROJECT_ID", "storageBucket": "DUMMY_STORAGE_BUCKET", "messagingSenderId": "DUMMY_MESSAGING_SENDER_ID", "appId": "DUMMY_APP_ID"}'
 
-# 🚨🚨🚨 Firebase 설정 JSON 문자열을 안정적으로 파싱하여 Python 딕셔너리로 준비합니다. 🚨🚨🚨
-FIREBASE_CONFIG_JSON_STRING = None
-try:
-    # 환경 변수 대신 직접 JSON 문자열을 사용
-    config_str = '{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}'
-    # JavaScript로 전달하기 위해 JSON 문자열 자체를 준비
-    FIREBASE_CONFIG_JSON_STRING = config_str
-except Exception:
-    st.error("FATAL ERROR: Firebase Configuration string is invalid.")
-
-
-# 페이지 이름 상수
+# --- 페이지 파일 정의 ---
+# 파일 경로를 정의합니다.
 PAGE_LOGIN = 'login'
 PAGE_SIGNUP = 'signup'
-PAGE_HOME = 'home'
+PAGE_HOME = 'home' # 메인 화면은 아직 구현되지 않았지만, 상태로 정의합니다.
 
-# 페이지 파일 경로 딕셔너리
 PAGE_FILES = {
     PAGE_LOGIN: 'htmls/login.html',
-    PAGE_SIGNUP: 'htmls/signup.html', 
-    PAGE_HOME: 'htmls/home.html',
+    PAGE_SIGNUP: 'htmls/signup.html',
+    # PAGE_HOME: 'htmls/home.html' # 홈 화면은 아직 구현되지 않았습니다.
 }
 
-# --- 2. HTML 로드 및 렌더링 함수 ---
-
+# --- 파일 읽기 유틸리티 함수 ---
 def read_html_file(file_path):
-    """지정된 경로의 HTML 파일 내용을 읽거나 오류 발생 시 None을 반환합니다."""
+    """HTML 파일을 읽고 내용을 반환합니다."""
+    base_path = pathlib.Path(__file__).parent.resolve()
+    full_path = base_path / file_path
+    
     try:
-        # 현재 파일(app.py)의 디렉토리 경로를 기준으로 파일을 찾습니다.
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        full_path = os.path.join(base_dir, file_path)
-        
-        # 파일이 존재하는지 확인 (추가적인 디버깅 정보)
-        if not os.path.exists(full_path):
-            # 파일이 없으면 명확한 오류와 함께 None 반환
-            st.error(f"❌ 오류: '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해주세요.")
-            st.info(f"시도된 경로: {full_path}")
-            return None
-
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
+    except FileNotFoundError:
+        st.error(f"Error: HTML file not found at {full_path}")
+        return None
     except Exception as e:
-        st.error(f"❌ 파일 읽기 중 오류: {e}")
+        st.error(f"Error reading file {file_path}: {e}")
         return None
 
-# --- 3. Streamlit 앱 상태 및 흐름 관리 ---
-
-# 세션 상태 초기화
+# --- Streamlit 상태 초기화 ---
 if 'current_page' not in st.session_state:
-    st.session_state.current_page = PAGE_LOGIN
-if 'is_authenticated' not in st.session_state:
-    st.session_state.is_authenticated = False
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'auth_message' not in st.session_state:
-    st.session_state.auth_message = None
+    # --- 디버깅을 위한 임시 변경: 새로고침 시 signup에 머물도록 강제 ---
+    # 디버깅 완료 후에는 st.session_state.current_page = PAGE_LOGIN 으로 변경해야 합니다.
+    st.session_state.current_page = PAGE_SIGNUP # 로그인 대신 회원가입 페이지를 기본값으로 설정
+    st.session_state.user_data = None
 
+# --- HTML 컴포넌트 이벤트 처리 함수 ---
+def handle_html_event(event_data):
+    """HTML 컴포넌트에서 전송된 이벤트를 처리합니다."""
+    if not isinstance(event_data, dict):
+        # 유효하지 않은 이벤트 데이터 무시
+        return
+    
+    event_type = event_data.get('type')
+    payload = event_data.get('payload', {})
 
-def navigate(target_page, message=None, uid=None, is_auth=None):
-    """상태만 업데이트하고, 렌더링은 Streamlit에 맡깁니다."""
-    st.session_state.current_page = target_page
-    if message is not None:
-        st.session_state.auth_message = message
-    if uid is not None:
-        st.session_state.user_id = uid
-    if is_auth is not None:
-        st.session_state.is_authenticated = is_auth
-        
-    # st.rerun()은 handle_html_event 내에서만 호출합니다.
-
-
-def handle_html_event(value):
-    """HTML 컴포넌트에서 받은 이벤트를 처리합니다."""
-    # 반환 값이 유효한 딕셔너리인지 확인하여 TypeError를 방지합니다.
-    if isinstance(value, dict) and 'event' in value:
-        event_type = value['event']
-        data = value.get('data', {})
-        
-        if event_type == 'NAVIGATE_TO':
-            target_page = data.get('page')
-            # HTML 내부의 전환 버튼(이전에 실패했던)이 호출된 경우
-            if target_page in PAGE_FILES:
-                st.session_state.auth_message = None 
-                navigate(target_page)
-                st.rerun() 
-            elif target_page is not None:
-                st.error(f"⚠️ 페이지 전환 실패: 요청된 페이지 '{target_page}'는 PAGE_FILES에 정의되어 있지 않습니다.")
+    # 1. 페이지 전환 이벤트 처리
+    if event_type == 'NAVIGATE_TO':
+        page = payload.get('page')
+        if page in PAGE_FILES:
+            st.session_state.current_page = page
+            # st.rerun() 대신 Streamlit이 자연스럽게 상태를 업데이트하도록 합니다.
+        else:
+            st.warning(f"Warning: Page '{page}' is not defined.")
             
-        elif event_type == 'LOGIN_SUCCESS':
-            uid = data.get('uid')
-            message = f"로그인 성공! 사용자 ID: {uid}"
-            navigate(PAGE_HOME, message=message, uid=uid, is_auth=True)
-            st.rerun()
-            
-        elif event_type == 'LOGOUT_SUCCESS':
-            message = "로그아웃 되었습니다."
-            navigate(PAGE_LOGIN, message=message, uid=None, is_auth=False)
-            st.rerun()
+    # 2. 로그인 성공 이벤트 처리
+    elif event_type == 'LOGIN_SUCCESS':
+        st.session_state.current_page = PAGE_HOME # 홈 화면으로 전환 (추후 구현)
+        st.session_state.user_data = payload.get('user')
+        # st.rerun()
 
-        elif event_type == 'AUTH_ERROR':
-            st.session_state.auth_message = f"인증 오류: {data.get('message', '알 수 없는 오류')}"
+    # 3. 회원가입 성공 이벤트 처리
+    elif event_type == 'SIGNUP_SUCCESS':
+        # 회원가입 성공 후 로그인 페이지로 전환
+        st.session_state.current_page = PAGE_LOGIN
+        # st.rerun()
+
+# --- 메인 앱 로직 ---
+
+# 1. 사이드바 (회원가입/로그인 버튼)
+st.sidebar.title("메뉴")
+current_user_authenticated = (st.session_state.user_data is not None)
+
+if not current_user_authenticated:
+    # 사용자가 로그인하지 않은 상태일 때만 '회원가입' 버튼 표시
+    if st.session_state.current_page == PAGE_LOGIN and st.sidebar.button("회원가입"):
+        st.session_state.current_page = PAGE_SIGNUP
         
-        elif event_type == 'SIGNUP_SUCCESS':
-            # 회원가입 성공 시 메시지를 표시하고 로그인 페이지로 이동
-            message = f"회원가입 성공: {data.get('email', '')}. 로그인 페이지로 이동합니다."
-            navigate(PAGE_LOGIN, message=message)
-            st.rerun()
+    elif st.session_state.current_page == PAGE_SIGNUP and st.sidebar.button("로그인 화면으로"):
+        st.session_state.current_page = PAGE_LOGIN
 
+# 2. 페이지 렌더링
+st.title("잡스트레블링 (Job Traveling)")
 
-# --- 4. 메인 앱 실행 ---
-
-st.set_page_config(layout="wide")
-st.title("💼 잡스트레블링 (Job-Trekking) 앱")
-
-# **🚨 Streamlit 네이티브 회원가입 버튼을 사이드바에 추가**
-if st.session_state.current_page == PAGE_LOGIN and not st.session_state.is_authenticated:
-    st.sidebar.header("앱 기능")
-    # Streamlit 네이티브 버튼 사용
-    if st.sidebar.button("회원가입", key="sidebar_signup"):
-        navigate(PAGE_SIGNUP)
-        st.rerun()
-    st.sidebar.markdown("---")
-elif st.session_state.current_page == PAGE_SIGNUP:
-     st.sidebar.header("회원가입")
-     if st.sidebar.button("로그인 화면으로 돌아가기", key="sidebar_back_to_login"):
-        navigate(PAGE_LOGIN)
-        st.rerun()
-
-
-# 인증 메시지 표시 및 리셋
-if st.session_state.auth_message:
-    if "오류" in st.session_state.auth_message or "실패" in st.session_state.auth_message or "인증 오류" in st.session_state.auth_message:
-        st.error(st.session_state.auth_message)
-    else:
-        st.success(st.session_state.auth_message)
-    st.session_state.auth_message = None 
-        
-st.markdown(f"**현재 로드 중인 페이지:** `{st.session_state.current_page.upper()}`")
-
-# 현재 페이지의 HTML 파일 경로 가져오기
 page_file = PAGE_FILES.get(st.session_state.current_page)
+html_content = read_html_file(page_file)
 
-# Firebase 설정 문자열이 유효할 때만 렌더링
-if page_file and FIREBASE_CONFIG_JSON_STRING:
-    # 안정적인 HTML 콘텐츠 로드 시도
-    html_content = read_html_file(page_file)
-    
-    # html_content가 None이 아닐 경우에만 컴포넌트 렌더링
-    if html_content is not None:
-        # HTML 컴포넌트에 주입할 JavaScript 변수 설정
-        js_variables = f"""
+if html_content:
+    # 1. JavaScript 변수 준비
+    # Python 변수를 JSON 문자열로 직렬화하여 JavaScript에 안전하게 전달
+    js_variables = f"""
         <script>
-            // Streamlit으로 이벤트와 데이터를 다시 보내는 함수
-            function sendToStreamlit(eventType, data = {{}}) {{
-                if (typeof Streamlit !== 'undefined' && Streamlit.setComponentValue) {{
-                    Streamlit.setComponentValue({{
-                        event: eventType,
-                        data: data,
-                        timestamp: Date.now() 
-                    }});
-                    // 이벤트 전송 후 프레임 높이를 다시 설정하여 Streamlit이 이벤트를 더 잘 포착하도록 유도
-                    Streamlit.setFrameHeight(document.documentElement.scrollHeight); 
-                }} else {{
-                    console.error("Streamlit 객체가 준비되지 않았습니다. 이벤트를 보낼 수 없습니다.");
-                }}
-            }}
-            
-            // JSON 문자열로 주입됩니다.
-            window.firebaseConfigJsonString = {json.dumps(FIREBASE_CONFIG_JSON_STRING)};
-            window.initialAuthToken = {json.dumps(INITIAL_AUTH_TOKEN)};
-            window.appId = {json.dumps(APP_ID)};
-
+            window.__app_id = "{appId}";
+            window.__firebase_config = JSON.parse('{FIREBASE_CONFIG_JSON_STRING.replace("'", "\\'")}')
         </script>
-        """
-        
-        try:
-            # key 인수가 호환되지 않으므로 제거하고 렌더링
-            component_value = st.components.v1.html(
-                js_variables + html_content,
-                height=800, 
-                scrolling=True,
-            )
-            
-            # 반환된 값이 유효한 딕셔너리일 때만 이벤트 처리 함수 호출
-            if component_value and isinstance(component_value, dict):
-                handle_html_event(component_value)
-                
-        except TypeError as e:
-            # key 인수가 제거되었으므로, 다른 유형의 TypeError를 처리합니다.
-            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 파라미터나 타입 정의를 확인해주세요.")
-            st.code(f"Error details: {e}", language='python')
-        except Exception as e:
-             st.error(f"🚨 알 수 없는 렌더링 오류: {e}")
-    else:
-        # read_html_file에서 오류가 발생했을 경우
-        pass 
+    """
     
-else:
-    if not FIREBASE_CONFIG_JSON_STRING:
-         st.error("🚨 환경 설정 오류: Firebase 설정이 유효하지 않거나 비어 있습니다.")
-    else:
-        st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
+    # 2. HTML 컴포넌트 렌더링
+    try:
+        component_value = st.components.v1.html(
+            js_variables + html_content,
+            height=600,
+            scrolling=True,
+            # 'key'와 'return_value' 인수는 Streamlit 버전에 따라 충돌하므로 제거합니다.
+        )
+
+        # 3. HTML 컴포넌트에서 반환된 값 처리
+        # component_value가 유효한 딕셔너리(이벤트)일 때만 처리
+        if isinstance(component_value, dict) and component_value:
+            handle_html_event(component_value)
+            
+    except Exception as e:
+        # 렌더링 중 발생할 수 있는 내부 오류 처리
+        st.error(f"🚨 컴포넌트 렌더링 오류가 발생했습니다. 개발자에게 문의하십시오. 오류: {e}")
+
+elif st.session_state.current_page == PAGE_HOME:
+    st.write("메인 화면 (로그인 성공)")
+    # 여기에 메인 화면 콘텐츠를 구현합니다.
+    if st.button("로그아웃"):
+        st.session_state.current_page = PAGE_LOGIN
+        st.session_state.user_data = None
+        # st.rerun()
+
+# 로그 상태 디버깅 (선택 사항)
+# st.sidebar.write("Debug Current Page:", st.session_state.current_page)
+# st.sidebar.write("Debug User Data:", st.session_state.user_data)
