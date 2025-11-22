@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
@@ -15,32 +15,36 @@
         setLogLevel('Debug');
         
         let auth;
+        let authReady = false;
 
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 // window.firebaseConfig는 app.py에서 주입됩니다.
                 const app = initializeApp(window.firebaseConfig);
                 auth = getAuth(app);
-                window.db = getFirestore(app); // Firestore 인스턴스 저장 (다른 페이지에서 사용)
+                window.db = getFirestore(app);
 
-                // Canvas 환경에서 제공되는 초기 인증 토큰으로 로그인 시도
+                // 1. 초기 인증 시도 (Canvas 환경)
                 if (window.initialAuthToken && window.initialAuthToken !== 'None') {
                     await signInWithCustomToken(auth, window.initialAuthToken);
                 } else {
-                    // 토큰이 없으면 익명 로그인 시도 (Firebase 기본 설정)
+                    // 토큰이 없으면 익명 로그인 시도
                     await signInAnonymously(auth);
                 }
 
-                // 기존 로그인 상태 확인
-                auth.onAuthStateChanged((user) => {
-                    if (user && user.isAnonymous === false) {
+                // 2. 인증 상태 변화 감지 및 자동 로그인 처리
+                onAuthStateChanged(auth, (user) => {
+                    if (!authReady) {
+                        authReady = true;
                         // 익명 사용자가 아닌 실제 로그인 사용자일 경우 홈으로 이동
-                        sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid });
+                        if (user && user.isAnonymous === false) {
+                             sendToStreamlit('LOGIN_SUCCESS', { uid: user.uid });
+                        }
                     }
                 });
                 
             } catch (error) {
-                console.error("Firebase 초기화 또는 인증 오류:", error);
+                console.error("Firebase 초기화 오류:", error);
                 // Streamlit으로 오류 메시지 전송
                 sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
             }
@@ -50,9 +54,11 @@
         window.login = async () => {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const messageBox = document.getElementById('message-box');
+            messageBox.classList.add('hidden');
             
             if (!email || !password) {
-                alert("이메일과 비밀번호를 모두 입력해주세요.");
+                displayMessage("이메일과 비밀번호를 모두 입력해주세요.", 'error');
                 return;
             }
 
@@ -64,7 +70,7 @@
             } catch (error) {
                 console.error("로그인 오류:", error);
                 const errorMessage = getFriendlyErrorMessage(error.code);
-                alert(`로그인 실패: ${errorMessage}`);
+                displayMessage(`로그인 실패: ${errorMessage}`, 'error');
                 sendToStreamlit('AUTH_ERROR', { message: `로그인 실패: ${errorMessage}` });
             }
         };
@@ -83,12 +89,22 @@
             }
         }
         
+        function displayMessage(message, type) {
+            const messageBox = document.getElementById('message-box');
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'text-red-600', 'text-green-600');
+            if (type === 'error') {
+                messageBox.classList.add('text-red-600');
+            } else {
+                messageBox.classList.add('text-green-600');
+            }
+        }
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" style="font-family: 'Inter', sans-serif;">
     <div class="w-full max-w-md bg-white p-8 rounded-xl shadow-2xl">
-        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">로그인</h2>
-        <div id="message-box" class="mb-4 text-sm text-red-600 font-medium hidden"></div>
+        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">잡스트레블링 로그인</h2>
+        <div id="message-box" class="mb-4 p-3 rounded-lg text-sm text-red-600 font-medium bg-red-100 hidden"></div>
         
         <div class="space-y-4">
             <div>
@@ -109,11 +125,6 @@
         </div>
         
         <div class="mt-6 flex items-center justify-center space-x-4 text-sm">
-            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'forgot_password' })" 
-               class="font-medium text-blue-600 hover:text-blue-500 transition duration-150">
-                비밀번호 찾기
-            </a>
-            <span class="text-gray-400">|</span>
             <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'signup' })" 
                class="font-medium text-blue-600 hover:text-blue-500 transition duration-150">
                 회원가입
