@@ -3,191 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>회원가입</title>
+    <title>진로 탐색 홈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
         setLogLevel('Debug');
         
         let auth;
         let db;
+        let userId;
+        let userProfile = {};
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const app = initializeApp(window.firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user && user.isAnonymous === false) {
+                        userId = user.uid;
+                        document.getElementById('user-id-display').textContent = userId;
+                        
+                        // 1. 사용자 프로필 로드 (회원가입 시 입력된 학교 정보)
+                        await loadUserProfile(userId);
+
+                        // 2. 프로그램 목록 로드 (샘플)
+                        await loadPrograms();
+
+                    } else {
+                        // 사용자가 로그아웃되었거나 익명 사용자일 경우 로그인 페이지로 강제 이동
+                        sendToStreamlit('LOGOUT_SUCCESS');
+                    }
+                });
             } catch (error) {
-                console.error("Firebase 초기화 오류:", error);
+                console.error("Firebase 초기화 또는 인증 오류:", error);
                 sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
             }
         });
 
-        // 사용자 회원가입 함수
-        window.signup = async () => {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const passwordConfirm = document.getElementById('password-confirm').value;
-            const schoolName = document.getElementById('school-name').value;
-            const grade = document.getElementById('grade').value;
-            const classNumber = document.getElementById('class-number').value;
-            const birthDate = document.getElementById('birth-date').value;
-            const messageBox = document.getElementById('message-box');
-            messageBox.classList.add('hidden');
-
-
-            if (!email || !password || !passwordConfirm || !schoolName || !grade || !classNumber || !birthDate) {
-                displayMessage("모든 필수 필드를 입력해주세요.", 'error');
-                return;
-            }
-            if (password !== passwordConfirm) {
-                displayMessage("비밀번호와 비밀번호 확인이 일치하지 않습니다.", 'error');
-                return;
-            }
-            if (password.length < 6) {
-                displayMessage("비밀번호는 6자리 이상이어야 합니다.", 'error');
-                return;
-            }
-
+        async function loadUserProfile(uid) {
+            const docRef = doc(db, "artifacts", window.appId, "users", uid, "profile", "data");
             try {
-                // 1. Firebase Authentication에 사용자 생성
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                const uid = userCredential.user.uid;
+                const docSnap = await getDoc(docRef);
 
-                // 2. Firestore에 추가 정보 저장 (Private Data)
-                const userData = {
-                    email: email,
-                    schoolName: schoolName,
-                    grade: grade, // 학년 (예: 초등학교, 중학교 2학년)
-                    classNumber: classNumber, // 반
-                    birthDate: birthDate, // 생년월일
-                    createdAt: new Date()
-                };
-
-                // Firestore 경로: /artifacts/{appId}/users/{userId}/profile/data
-                const profileDocRef = doc(db, "artifacts", window.appId, "users", uid, "profile", "data");
-                await setDoc(profileDocRef, userData);
-
-
-                // 회원가입 성공 후 로그인 페이지로 이동하도록 Streamlit에 전송
-                displayMessage(`회원가입 성공: ${email}. 로그인 페이지로 이동합니다.`, 'success');
-                sendToStreamlit('SIGNUP_SUCCESS', { email: email });
+                if (docSnap.exists()) {
+                    userProfile = docSnap.data();
+                    document.getElementById('welcome-message').textContent = 
+                        `${userProfile.schoolName} ${userProfile.grade} 학생 환영합니다!`;
+                } else {
+                    document.getElementById('welcome-message').textContent = `환영합니다! (프로필 데이터 없음)`;
+                }
             } catch (error) {
-                console.error("회원가입 오류:", error);
-                const errorMessage = getFriendlyErrorMessage(error.code);
-                displayMessage(`회원가입 실패: ${errorMessage}`, 'error');
-                sendToStreamlit('AUTH_ERROR', { message: `회원가입 실패: ${errorMessage}` });
+                console.error("사용자 프로필 로드 오류:", error);
+            }
+        }
+
+        async function loadPrograms() {
+            const programsContainer = document.getElementById('programs-list');
+            programsContainer.innerHTML = '<p class="text-gray-500">진로 프로그램 데이터를 로드하는 중...</p>';
+
+            // Firestore 샘플 데이터 로드 (공개 데이터 컬렉션 경로 사용)
+            // 실제 구현 시 'programs' 컬렉션에 데이터가 있어야 합니다.
+            const programsColRef = collection(db, "artifacts", window.appId, "public", "data", "programs");
+            
+            // 🚨 실제로는 여기에 학교 정보나 관심사에 기반한 쿼리가 추가됩니다.
+            try {
+                const q = query(programsColRef);
+                const querySnapshot = await getDocs(q);
+                
+                let programHtml = '';
+                if (querySnapshot.empty) {
+                    programHtml = '<p class="text-gray-500 p-4 bg-yellow-50 rounded-lg">현재 등록된 진로 프로그램이 없습니다.</p>';
+                } else {
+                    querySnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        programHtml += `
+                            <div class="p-4 border-b hover:bg-gray-50 transition duration-150">
+                                <h4 class="font-semibold text-blue-600">${data.title || '제목 없음'}</h4>
+                                <p class="text-sm text-gray-500">${data.location || '위치 정보 없음'} | ${data.date || '날짜 미정'}</p>
+                                <button class="mt-2 text-xs text-indigo-500 hover:text-indigo-700">자세히 보기 &gt;</button>
+                            </div>
+                        `;
+                    });
+                }
+                programsContainer.innerHTML = programHtml;
+
+            } catch (error) {
+                console.error("프로그램 목록 로드 오류:", error);
+                programsContainer.innerHTML = `<p class="text-red-500 p-4 bg-red-100 rounded-lg">프로그램 데이터 로드 중 오류 발생: ${error.message}</p>`;
+            }
+        }
+
+        window.logout = async () => {
+            try {
+                await signOut(auth);
+                // Streamlit에 로그아웃 성공 이벤트 전송
+                sendToStreamlit('LOGOUT_SUCCESS');
+            } catch (error) {
+                console.error("로그아웃 오류:", error);
+                // alert 대신 메시지 박스 사용 필요
+                sendToStreamlit('AUTH_ERROR', { message: `로그아웃 실패: ${error.message}` });
             }
         };
-
-        // Firebase 오류 코드를 사용자 친화적인 메시지로 변환
-        function getFriendlyErrorMessage(errorCode) {
-            switch (errorCode) {
-                case 'auth/email-already-in-use':
-                    return '이미 사용 중인 이메일입니다.';
-                case 'auth/invalid-email':
-                    return '유효하지 않은 이메일 형식입니다.';
-                case 'auth/weak-password':
-                    return '비밀번호가 너무 약합니다. 6자리 이상으로 설정해주세요.';
-                default:
-                    return '알 수 없는 회원가입 오류가 발생했습니다.';
-            }
-        }
-        
-        function displayMessage(message, type) {
-            const messageBox = document.getElementById('message-box');
-            messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'text-red-600', 'text-green-600');
-            if (type === 'error') {
-                messageBox.classList.add('text-red-600', 'bg-red-100');
-            } else {
-                messageBox.classList.add('text-green-600', 'bg-green-100');
-            }
-        }
     </script>
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" style="font-family: 'Inter', sans-serif;">
-    <div class="w-full max-w-lg bg-white p-8 rounded-xl shadow-2xl">
-        <h2 class="text-3xl font-extrabold text-gray-900 text-center mb-6">학생 회원가입 (진로 맞춤 정보)</h2>
-        <div id="message-box" class="mb-4 p-3 rounded-lg text-sm font-medium hidden"></div>
-        
-        <div class="space-y-4">
-            <!-- 기본 정보 -->
-            <h3 class="text-lg font-bold text-gray-800 border-b pb-1">기본 정보</h3>
+<body class="bg-gray-100 min-h-screen p-8" style="font-family: 'Inter', sans-serif;">
+    <div class="w-full max-w-6xl mx-auto bg-white p-10 rounded-xl shadow-2xl space-y-8">
+        <!-- 헤더 및 로그아웃 -->
+        <div class="flex justify-between items-center pb-4 border-b">
             <div>
-                <label for="email" class="block text-sm font-medium text-gray-700">이메일 주소</label>
-                <input id="email" type="email" placeholder="job@trekking.com" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                <h1 class="text-3xl font-extrabold text-gray-900">💼 잡스트레블링 (Job-Trekking)</h1>
+                <p id="welcome-message" class="text-xl text-gray-600 mt-1">로그인 정보 확인 중...</p>
+                <p class="text-xs text-gray-400 mt-1">사용자 ID: <span id="user-id-display">N/A</span></p>
             </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-700">비밀번호 (6자리 이상)</label>
-                <input id="password" type="password" placeholder="********" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-            </div>
-            <div>
-                <label for="password-confirm" class="block text-sm font-medium text-gray-700">비밀번호 확인</label>
-                <input id="password-confirm" type="password" placeholder="********" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-            </div>
-            
-            <!-- 학교 정보 및 생년월일 -->
-            <h3 class="text-lg font-bold text-gray-800 border-b pb-1 pt-4">맞춤형 진로 정보</h3>
-            
-            <div>
-                <label for="school-name" class="block text-sm font-medium text-gray-700">학교명</label>
-                <input id="school-name" type="text" placeholder="예: 잡트레킹 중학교" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-            </div>
-            
-            <div class="flex space-x-4">
-                <div class="w-1/2">
-                    <label for="grade" class="block text-sm font-medium text-gray-700">학년</label>
-                    <select id="grade" required
-                            class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 bg-white">
-                        <option value="">학년 선택</option>
-                        <option value="초등학교 1학년">초등학교 1학년</option>
-                        <option value="초등학교 2학년">초등학교 2학년</option>
-                        <option value="초등학교 3학년">초등학교 3학년</option>
-                        <option value="초등학교 4학년">초등학교 4학년</option>
-                        <option value="초등학교 5학년">초등학교 5학년</option>
-                        <option value="초등학교 6학년">초등학교 6학년</option>
-                        <option value="중학교 1학년">중학교 1학년</option>
-                        <option value="중학교 2학년">중학교 2학년</option>
-                        <option value="중학교 3학년">중학교 3학년</option>
-                        <option value="고등학교 1학년">고등학교 1학년</option>
-                        <option value="고등학교 2학년">고등학교 2학년</option>
-                        <option value="고등학교 3학년">고등학교 3학년</option>
-                    </select>
-                </div>
-                <div class="w-1/2">
-                    <label for="class-number" class="block text-sm font-medium text-gray-700">반</label>
-                    <input id="class-number" type="text" placeholder="예: 3반 (숫자만 입력)" required 
-                           class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+            <button onclick="logout()" 
+                    class="px-5 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 shadow-md">
+                로그아웃
+            </button>
+        </div>
+
+        <!-- 지도 및 목록 섹션 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 1. 지도 (Placeholder) -->
+            <div class="lg:col-span-2 bg-gray-200 h-96 rounded-xl shadow-inner flex items-center justify-center border-4 border-gray-300">
+                <div class="text-center text-gray-600 p-4">
+                    <div class="text-4xl mb-2">🗺️</div>
+                    <p class="font-bold">지도 기반 진로 탐색 영역</p>
+                    <p class="text-sm">실제 구현 시 이 위치에 지도(예: Kakao/Naver Map)가 표시됩니다.</p>
                 </div>
             </div>
 
-            <div>
-                <label for="birth-date" class="block text-sm font-medium text-gray-700">생년월일</label>
-                <input id="birth-date" type="date" required 
-                       class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+            <!-- 2. 프로그램 목록 -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-xl border border-gray-100">
+                <h3 class="text-2xl font-bold text-blue-700 mb-4 border-b pb-2">나에게 맞는 추천 프로그램</h3>
+                <div id="programs-list" class="space-y-2 max-h-[300px] overflow-y-auto">
+                    <!-- 프로그램 목록이 여기에 로드됩니다. -->
+                </div>
+                <button class="w-full mt-4 py-2 bg-blue-100 text-blue-600 font-medium rounded-lg hover:bg-blue-200 transition duration-150">
+                    전체 프로그램 더 보기
+                </button>
             </div>
-            
-            
-            <button onclick="signup()" 
-                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-[1.01] mt-6">
-                가입하고 진로 찾기
-            </button>
         </div>
-        
-        <div class="mt-6 text-center">
-            <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'login' })" 
-               class="font-medium text-blue-600 hover:text-blue-500 transition duration-150">
-                이미 계정이 있으신가요? 로그인으로 돌아가기
-            </a>
+
+        <!-- 정보 제공 섹션 (추가 기능) -->
+        <div class="pt-4 border-t">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">📢 잡스트레블링 추천 가이드</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-4 bg-indigo-50 rounded-lg shadow-md border border-indigo-200">
+                    <h4 class="font-bold text-indigo-700">학교 기반 맞춤 진로</h4>
+                    <p class="text-sm text-indigo-600">등록된 학교/학년 정보를 바탕으로 가까운 지역의 진로 활동을 추천합니다.</p>
+                </div>
+                <div class="p-4 bg-yellow-50 rounded-lg shadow-md border border-yellow-200">
+                    <h4 class="font-bold text-yellow-700">멘토링/탐방 기록</h4>
+                    <p class="text-sm text-yellow-600">진로 탐방 후기 및 멘토링 기록을 저장하고 공유할 수 있습니다.</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg shadow-md border border-green-200">
+                    <h4 class="font-bold text-green-700">공지 및 알림</h4>
+                    <p class="text-sm text-green-600">새로운 프로그램 등록, 신청 마감 알림 등을 확인할 수 있습니다.</p>
+                </div>
+            </div>
         </div>
     </div>
 </body>
