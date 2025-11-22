@@ -60,6 +60,7 @@
          */
         function postMessageToParent(type, payload = {}) {
             // console.log("PostMessage:", type, payload);
+            // 이 메시지를 Streamlit으로 전달하면 Python에서 handle_component_event가 호출됩니다.
             window.parent.postMessage({ type, payload }, '*');
         }
 
@@ -118,8 +119,11 @@
                     const userData = { ...MOCK_USER_DATA };
                     delete userData.password;
                     
+                    // <<<<<<<<< 이 부분이 핵심 수정입니다 >>>>>>>>>
+                    // 모의 로그인 성공 시 Streamlit에 LOGIN_SUCCESS 이벤트를 전송하여 페이지 전환을 요청합니다.
                     postMessageToParent('LOGIN_SUCCESS', { userData: userData });
-                    return;
+                    // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                    return; // 모의 로그인에 성공했으므로 실제 Firebase 로그인 시도는 하지 않습니다.
                 }
             }
             // ----------------------------------------------------
@@ -177,7 +181,7 @@
                         errorMessage = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.';
                         break;
                     default:
-                        errorMessage = '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+                        errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다.';
                 }
                 messageDiv.textContent = errorMessage;
                 messageDiv.classList.add('bg-red-100', 'text-red-700');
@@ -228,8 +232,7 @@
                  console.error("Firebase 설정 정보가 없습니다.");
                  document.getElementById('message').textContent = '[Firebase 설정 정보 누락] Mock 기능을 사용하거나, 설정 정보로 대체해주세요.';
                  document.getElementById('message').classList.add('bg-orange-100', 'text-orange-700');
-                 // Mock 로그인 시도는 가능해야 하므로 버튼을 활성화 상태로 유지하거나, Mock 데이터를 기반으로 판단해야 함
-                 // 여기서는 Mock 데이터가 있으면 로그인 시도는 허용합니다.
+                 // Mock 로그인 시도는 가능해야 하므로 버튼을 활성화 상태로 유지
                  document.getElementById('login-button').disabled = false; 
             }
         }
