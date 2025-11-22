@@ -18,7 +18,6 @@ try:
     # JavaScript로 전달하기 위해 JSON 문자열 자체를 준비
     FIREBASE_CONFIG_JSON_STRING = config_str
 except Exception:
-    # 이 오류는 Python에서 처리되므로, JS로 전달되지 않습니다.
     st.error("FATAL ERROR: Firebase Configuration string is invalid.")
 
 
@@ -37,7 +36,7 @@ PAGE_FILES = {
 # --- 2. HTML 로드 및 렌더링 함수 ---
 
 def read_html_file(file_path):
-    """지정된 경로의 HTML 파일 내용을 읽거나 오류 HTML을 반환합니다."""
+    """지정된 경로의 HTML 파일 내용을 읽거나 오류 발생 시 None을 반환합니다."""
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(base_dir, file_path)
@@ -45,8 +44,6 @@ def read_html_file(file_path):
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # 파일이 없을 경우 오류 메시지를 반환합니다. 이 메시지는 HTML이 아니므로, 
-        # 호출하는 측에서 안정적인 HTML이 로드되지 않았음을 판단할 수 있도록 None이나 빈 문자열을 반환해야 합니다.
         st.error(f"[파일 로드 오류] '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해 주세요.")
         return None
     except Exception as e:
@@ -131,7 +128,7 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
     # 안정적인 HTML 콘텐츠 로드 시도
     html_content = read_html_file(page_file)
     
-    # ***핵심 수정: html_content가 None이 아닐 경우에만 컴포넌트 렌더링***
+    # html_content가 None이 아닐 경우에만 컴포넌트 렌더링
     if html_content is not None:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
         js_variables = f"""
@@ -160,22 +157,29 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         </script>
         """
         
-        # Streamlit HTML 컴포넌트 렌더링
-        # line 169
-        component_value = st.components.v1.html(
-            js_variables + html_content,
-            height=800, 
-            scrolling=True, 
-            key=st.session_state.current_page, 
-            return_value=True
-        )
-        
-        # 반환된 값이 있으면 이벤트 처리 함수 호출
-        if component_value:
-            handle_html_event(component_value)
+        # Streamlit HTML 컴포넌트 렌더링 (try-except로 안정성 강화)
+        try:
+            component_value = st.components.v1.html(
+                js_variables + html_content,
+                height=800, 
+                scrolling=True, 
+                key=st.session_state.current_page, 
+                return_value=True
+            )
+            
+            # 반환된 값이 있으면 이벤트 처리 함수 호출
+            if component_value:
+                handle_html_event(component_value)
+                
+        except TypeError as e:
+            # st.components.v1.html 내부에서 발생하는 Type Error를 잡습니다.
+            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 페이지를 새로고침하거나 개발자에게 문의하십시오.")
+            st.code(f"Error details: {e}", language='python')
+        except Exception as e:
+             st.error(f"🚨 알 수 없는 렌더링 오류: {e}")
     else:
         # read_html_file에서 오류가 발생했을 경우 (이미 st.error가 호출됨)
-        pass # 추가적인 렌더링 오류 메시지 없이 빠져나갑니다.
+        pass 
     
 else:
     if not FIREBASE_CONFIG_JSON_STRING:
