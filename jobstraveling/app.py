@@ -10,15 +10,15 @@ import time
 APP_ID = os.getenv('__app_id', 'job_trekking_app')
 INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
 
-# 🚨🚨🚨 Firebase 설정 JSON 문자열을 안정적으로 파싱 및 덤프합니다. 🚨🚨🚨
-FIREBASE_CONFIG_JSON = None
+# 🚨🚨🚨 Firebase 설정 JSON 문자열을 안정적으로 파싱하여 Python 딕셔너리로 준비합니다. 🚨🚨🚨
+FIREBASE_CONFIG_JSON_STRING = None
 try:
-    # 환경 변수 대신 직접 JSON 문자열을 사용하고, 파싱 및 덤프 과정을 명확히 함
-    FIREBASE_CONFIG_DICT = json.loads('{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}')
-    FIREBASE_CONFIG_JSON = json.dumps(FIREBASE_CONFIG_DICT) 
-except json.JSONDecodeError:
-    st.error("FATAL ERROR: Firebase Configuration string is invalid JSON.")
-    FIREBASE_CONFIG_JSON = "{}"
+    # 환경 변수 대신 직접 JSON 문자열을 사용
+    config_str = '{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}'
+    # JavaScript로 전달하기 위해 JSON 문자열 자체를 준비
+    FIREBASE_CONFIG_JSON_STRING = config_str
+except Exception:
+    st.error("FATAL ERROR: Firebase Configuration string is invalid.")
 
 
 # 페이지 이름 상수
@@ -133,17 +133,20 @@ st.markdown(f"**현재 로드 중인 페이지:** `{st.session_state.current_pag
 # 현재 페이지의 HTML 파일 경로 가져오기
 page_file = PAGE_FILES.get(st.session_state.current_page)
 
-if page_file and FIREBASE_CONFIG_JSON and FIREBASE_CONFIG_JSON != "{}":
+# Firebase 설정 문자열이 유효할 때만 렌더링
+if page_file and FIREBASE_CONFIG_JSON_STRING:
     # 안정적인 HTML 콘텐츠 로드 시도
     html_content = read_html_file(page_file)
     
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
-        # Python에서 직렬화된 JSON 문자열과 기타 변수를 JavaScript로 전달
+        # JavaScript 문자열 리터럴로 안전하게 주입하기 위해 다시 한번 json.dumps() 사용
+        # (이로 인해 JS에서는 JSON.parse가 필요함)
         js_variables = f"""
         <script>
-            // JavaScript에서 JSON.parse를 사용하여 객체로 변환합니다.
-            window.firebaseConfig = JSON.parse({json.dumps(FIREBASE_CONFIG_JSON)}); 
+            // JSON 문자열로 주입됩니다. JS에서 JSON.parse를 사용하여 객체로 변환해야 합니다.
+            window.firebaseConfigJsonString = {json.dumps(FIREBASE_CONFIG_JSON_STRING)};
+            
             // initialAuthToken은 문자열 또는 None이므로, 안전하게 주입합니다.
             window.initialAuthToken = {json.dumps(INITIAL_AUTH_TOKEN)};
             window.appId = {json.dumps(APP_ID)};
@@ -165,7 +168,6 @@ if page_file and FIREBASE_CONFIG_JSON and FIREBASE_CONFIG_JSON != "{}":
         """
         
         # Streamlit HTML 컴포넌트 렌더링
-        # key를 현재 페이지로 설정하여 페이지가 변경될 때 컴포넌트가 리셋되도록 합니다.
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
@@ -179,7 +181,7 @@ if page_file and FIREBASE_CONFIG_JSON and FIREBASE_CONFIG_JSON != "{}":
             handle_html_event(component_value)
     
 else:
-    if FIREBASE_CONFIG_JSON is None or FIREBASE_CONFIG_JSON == "{}":
-         st.error("🚨 환경 설정 오류: Firebase 설정이 유효하지 않습니다.")
+    if not FIREBASE_CONFIG_JSON_STRING:
+         st.error("🚨 환경 설정 오류: Firebase 설정이 유효하지 않거나 비어 있습니다. `app.py`의 `FIREBASE_CONFIG_JSON_STRING` 변수를 확인해주세요.")
     else:
         st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
