@@ -144,8 +144,6 @@ if page_file:
     
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
-        # FIREBASE_CONFIG_JSON은 이미 직렬화된 문자열이므로,
-        # JS에서 안전한 문자열 리터럴로 주입하기 위해 최종적으로 한 번 더 dumps 합니다.
         js_variables = f"""
         <script>
             // JavaScript에서 JSON.parse를 사용하여 객체로 변환합니다.
@@ -167,6 +165,7 @@ if page_file:
         
         # Streamlit HTML 컴포넌트 렌더링
         # key를 현재 페이지로 설정하여 페이지가 변경될 때 컴포넌트가 리셋되도록 합니다.
+        # height를 정적으로 800px로 설정하여 컴포넌트 크기 계산 오류 방지
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
