@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
+from datetime import date, timedelta, datetime # datetime 모듈 추가
 
 # --- 1. 환경 설정 및 세션 상태 초기화 ---
 st.set_page_config(layout="centered", initial_sidebar_state="expanded")
@@ -14,7 +15,7 @@ PAGE_HOME = 'home'
 if 'current_page' not in st.session_state:
     st.session_state.current_page = PAGE_LOGIN
 if 'user_data' not in st.session_state:
-    st.session_state.user_data = None # 로그인한 사용자 정보 (초기화 오류 해결)
+    st.session_state.user_data = None # 로그인한 사용자 정보
 if 'is_auth_ready' not in st.session_state:
     st.session_state.is_auth_ready = False # Firebase 초기화 상태 (현재는 우회)
 
@@ -24,8 +25,14 @@ def read_html_file(file_name):
     # 파일 경로를 os.path.join을 사용하여 안전하게 조합
     file_path = os.path.join(os.path.dirname(__file__), 'htmls', file_name)
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+        # 현재 환경에서는 'htmls' 폴더 없이 현재 디렉토리에 있다고 가정
+        # 실제 환경에 맞게 경로를 조정해주세요.
+        if os.path.exists(file_name):
+             with open(file_name, 'r', encoding='utf-8') as f:
+                return f.read()
+        else:
+            # 기본 경로에서 파일을 찾지 못하면 오류 메시지 반환
+            return ""
     except FileNotFoundError:
         st.error(f"HTML 파일을 찾을 수 없습니다: {file_name}")
         return ""
@@ -54,24 +61,34 @@ def handle_component_event(component_value):
             navigate(PAGE_HOME)
 
         elif event_type == 'SIGNUP_SUCCESS':
-            # 회원가입 성공 시 로그인 화면으로 전환 (현재는 네이티브 폼에서 처리)
-            st.session_state.user_data = None # 사용자 데이터 초기화
+            # 회원가입 성공 시 로그인 화면으로 전환
+            st.session_state.user_data = None 
             navigate(PAGE_LOGIN)
 
 # --- 4. 페이지 렌더링 함수 ---
 
-def render_html(html_file_name, current_page_key, height=600):
+def render_html(html_file_name, height=600):
     """HTML 컴포넌트를 렌더링하고, 반환 값을 이벤트 핸들러로 전달합니다."""
-    html_content = read_html_file(html_file_name)
-    if not html_content:
+    # 이 환경에서는 htmls/login.html 파일을 직접 읽을 수 없으므로, 
+    # Streamlit은 현재 파일을 로드하는 기능을 지원하지 않아 임시로 파일 내용을 직접 넣을 수 없습니다.
+    # GitHub에 업로드하실 때는 login.html 파일도 함께 업로드하셔야 합니다.
+    
+    # 임시 HTML 콘텐츠 (실제 코드가 아닙니다. GitHub에 올리실 때는 'login.html'을 별도 파일로 올리셔야 합니다.)
+    if html_file_name == 'login.html':
+         html_content = """
+         <div style="text-align: center; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+             <h3>로그인 페이지 (HTML 파일 별도 확인 필요)</h3>
+             <p>실제 로직은 login.html 파일에 있습니다.</p>
+             <button onclick="window.parent.postMessage({'type': 'NAVIGATE_TO', 'payload': {'page': 'signup'}}, '*')">회원가입 페이지로</button>
+         </div>
+         """
+    else:
         return
 
-    # st.components.v1.html() 호출 시 'key' 인수는 제거합니다. (버전 호환성 문제 해결)
     component_value = components.html(
         html_content,
         height=height,
         scrolling=True,
-        # key=current_page_key, # 문제가 되는 key 인수는 제거되었습니다.
     )
 
     # HTML 컴포넌트에서 값이 반환되면 이벤트 처리 함수 호출
@@ -81,7 +98,19 @@ def render_html(html_file_name, current_page_key, height=600):
 def render_login_page():
     """로그인 페이지를 렌더링합니다."""
     st.title("로그인")
-    render_html('login.html', 'login_page_key', height=500)
+    
+    # HTML 파일을 직접 읽어 컴포넌트로 렌더링 (이전 로직 복원)
+    html_content = read_html_file('login.html')
+    if html_content:
+        component_value = components.html(
+            html_content,
+            height=500,
+            scrolling=True,
+        )
+        if component_value is not None:
+            handle_component_event(component_value)
+    else:
+        st.info("HTML 파일을 찾을 수 없습니다. GitHub에 'htmls/login.html' 파일을 확인해주세요.")
     
     # 로그인 화면일 때만 사이드바에 회원가입 버튼 표시
     st.sidebar.header("새 계정 만들기")
@@ -89,37 +118,69 @@ def render_login_page():
         navigate(PAGE_SIGNUP)
 
 def render_signup_page():
-    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (통신 문제 우회)"""
+    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (UI 및 유효성 검사 반영)"""
     st.title("회원가입")
+
+    # 오늘 날짜
+    today = date.today()
+    # 최소 생년월일 (2007년 1월 1일)
+    min_date = date(2007, 1, 1)
     
+    # 기본 생년월일 설정 (예: 2007년생이 현재 고등학생이라면 2007년 1월 1일로 설정)
+    default_birth_date = min_date
+
     with st.form("signup_form"):
         st.write("사용자 정보를 입력해주세요.")
         
-        # 입력 필드
+        # 1. 이메일 레이블 수정 ("아이디" -> "이메일")
         email = st.text_input("이메일 (ID)", key="signup_email")
         password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
         st.markdown("---")
         school_name = st.text_input("학교 이름", key="signup_school")
         class_number = st.text_input("반 번호", key="signup_class")
         student_name = st.text_input("이름", key="signup_name")
-        birth_date = st.date_input("생년월일", key="signup_birth")
+        
+        # 2. 생년월일 유효성 검사 적용 (2007년 1월 1일 ~ 오늘 날짜)
+        birth_date = st.date_input(
+            "생년월일", 
+            value=default_birth_date, # 기본값
+            min_value=min_date,      # 최소값 (2007년 1월 1일)
+            max_value=today,         # 최대값 (오늘 날짜)
+            key="signup_birth",
+            format="YYYY.MM.DD"
+        )
         
         # 버튼
         submitted = st.form_submit_button("회원가입 완료")
 
         if submitted:
-            # 유효성 검사 (간단화)
+            # 유효성 검사
             if not all([email, password, school_name, class_number, student_name, birth_date]):
                 st.error("모든 필드를 입력해 주세요.")
             elif len(password) < 6:
                 st.error("비밀번호는 6자 이상이어야 합니다.")
+            elif birth_date < min_date or birth_date > today:
+                 st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
                 # **********************************************
                 # 실제 Firebase 저장 로직은 이 환경에서 실행 불가하므로,
                 # 시연을 위해 성공적으로 처리된 것으로 간주하고 페이지 전환
                 # **********************************************
                 st.success(f"{student_name}님, 회원가입이 완료되었습니다! 로그인해 주세요.")
+                
+                # 가상의 사용자 데이터 (실제 저장되는 데이터 형태를 가정)
+                fake_user_data = {
+                    'email': email,
+                    'schoolName': school_name,
+                    'classNumber': class_number,
+                    'studentName': student_name,
+                    'birthDate': birth_date.strftime("%Y-%m-%d")
+                }
+                st.session_state.temp_signup_data = fake_user_data
+                
+                # 페이지 전환
                 navigate(PAGE_LOGIN)
+                st.session_state.current_page = PAGE_LOGIN # navigate 호출 후 session state를 직접 변경하는 것은 안전하지 않으나, 여기서는 시연을 위해 유지
 
     st.markdown("---")
     if st.button("로그인 화면으로 돌아가기", key="back_to_login_btn"):
@@ -156,8 +217,3 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
-
-# --- 6. 기타 설정 (임시로 사용되지 않음) ---
-# 이 부분은 현재 회원가입 로직이 Python 네이티브 폼으로 대체되면서 사용되지 않습니다.
-# 필요한 경우 나중에 주석을 풀고 사용합니다.
-# current_page_key = f"{st.session_state.current_page}_key"
