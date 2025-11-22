@@ -168,11 +168,12 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         """
         
         # Streamlit HTML 컴포넌트 렌더링
+        # st.rerun()이 발생할 때마다 HTML 콘텐츠가 다시 로드되므로, key는 페이지 전환 시에만 변경되도록 유지합니다.
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
             scrolling=True, 
-            key=st.session_state.current_page, # 페이지 전환을 위한 고유 키
+            key=st.session_state.current_page, 
             return_value=True
         )
         
