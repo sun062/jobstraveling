@@ -29,7 +29,7 @@ PAGE_HOME = 'home'
 # 페이지 파일 경로 딕셔너리
 PAGE_FILES = {
     PAGE_LOGIN: 'htmls/login.html',
-    PAGE_SIGNUP: 'htmls/signup.html',
+    PAGE_SIGNUP: 'htmls/signup.html', # 회원가입 파일 추가
     PAGE_HOME: 'htmls/home.html',
 }
 
@@ -78,7 +78,8 @@ def navigate(target_page, message=None, uid=None, is_auth=None):
 
 def handle_html_event(value):
     """HTML 컴포넌트에서 받은 이벤트를 처리합니다."""
-    if value and 'event' in value:
+    # 반환 값이 유효한 딕셔너리인지 확인하여 TypeError를 방지합니다.
+    if isinstance(value, dict) and 'event' in value:
         event_type = value['event']
         data = value.get('data', {})
         
@@ -164,15 +165,15 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                 js_variables + html_content,
                 height=800, 
                 scrolling=True, 
-                # return_value=True 인수를 제거했습니다.
             )
             
-            # 반환된 값이 있으면 이벤트 처리 함수 호출
-            if component_value:
+            # 반환된 값이 유효한 딕셔너리일 때만 이벤트 처리 함수 호출
+            if component_value and isinstance(component_value, dict):
                 handle_html_event(component_value)
                 
         except TypeError as e:
             # st.components.v1.html 내부에서 발생하는 Type Error를 잡습니다.
+            # DeltaGenerator 오류는 여기서 발생하지 않지만, 다른 예외를 처리합니다.
             st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 페이지를 새로고침하거나 개발자에게 문의하십시오.")
             st.code(f"Error details: {e}", language='python')
         except Exception as e:
