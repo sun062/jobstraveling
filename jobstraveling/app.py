@@ -78,8 +78,7 @@ def navigate(target_page, message=None, uid=None, is_auth=None):
     if is_auth is not None:
         st.session_state.is_authenticated = is_auth
         
-    # 🚨🚨🚨 st.rerun()을 제거하여 불필요한 재실행을 막습니다.
-    # st.rerun()
+    # st.rerun()은 handle_html_event 내에서만 호출합니다.
 
 
 def handle_html_event(value):
@@ -91,10 +90,10 @@ def handle_html_event(value):
         
         if event_type == 'NAVIGATE_TO':
             target_page = data.get('page')
+            # HTML 내부의 전환 버튼(이전에 실패했던)이 호출된 경우
             if target_page in PAGE_FILES:
                 st.session_state.auth_message = None 
                 navigate(target_page)
-                # 🚨🚨🚨 상태가 변경되었으므로 즉시 재실행
                 st.rerun() 
             elif target_page is not None:
                 st.error(f"⚠️ 페이지 전환 실패: 요청된 페이지 '{target_page}'는 PAGE_FILES에 정의되어 있지 않습니다.")
@@ -124,6 +123,21 @@ def handle_html_event(value):
 
 st.set_page_config(layout="wide")
 st.title("💼 잡스트레블링 (Job-Trekking) 앱")
+
+# **🚨 Streamlit 네이티브 회원가입 버튼을 사이드바에 추가**
+if st.session_state.current_page == PAGE_LOGIN and not st.session_state.is_authenticated:
+    st.sidebar.header("앱 기능")
+    # Streamlit 네이티브 버튼 사용
+    if st.sidebar.button("회원가입", key="sidebar_signup"):
+        navigate(PAGE_SIGNUP)
+        st.rerun()
+    st.sidebar.markdown("---")
+elif st.session_state.current_page == PAGE_SIGNUP:
+     st.sidebar.header("회원가입")
+     if st.sidebar.button("로그인 화면으로 돌아가기", key="sidebar_back_to_login"):
+        navigate(PAGE_LOGIN)
+        st.rerun()
+
 
 # 인증 메시지 표시 및 리셋
 if st.session_state.auth_message:
@@ -156,7 +170,7 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                         data: data,
                         timestamp: Date.now() 
                     }});
-                    // 🚨🚨🚨 이벤트 전송 후 프레임 높이를 다시 설정하여 Streamlit이 이벤트를 더 잘 포착하도록 유도
+                    // 이벤트 전송 후 프레임 높이를 다시 설정하여 Streamlit이 이벤트를 더 잘 포착하도록 유도
                     Streamlit.setFrameHeight(document.documentElement.scrollHeight); 
                 }} else {{
                     console.error("Streamlit 객체가 준비되지 않았습니다. 이벤트를 보낼 수 없습니다.");
@@ -184,6 +198,7 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                 handle_html_event(component_value)
                 
         except TypeError as e:
+            # key 인수가 제거되었으므로, 다른 유형의 TypeError를 처리합니다.
             st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 파라미터나 타입 정의를 확인해주세요.")
             st.code(f"Error details: {e}", language='python')
         except Exception as e:
