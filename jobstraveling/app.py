@@ -31,7 +31,6 @@ PAGE_FILES = {
     PAGE_LOGIN: 'htmls/login.html',
     PAGE_SIGNUP: 'htmls/signup.html', 
     PAGE_HOME: 'htmls/home.html',
-    # '비밀번호 찾기' 페이지는 현재 앱 흐름에서 제외되었습니다.
 }
 
 # --- 2. HTML 로드 및 렌더링 함수 ---
@@ -40,15 +39,20 @@ def read_html_file(file_path):
     """지정된 경로의 HTML 파일 내용을 읽거나 오류 발생 시 None을 반환합니다."""
     try:
         # 현재 파일(app.py)의 디렉토리 경로를 기준으로 파일을 찾습니다.
+        # os.path.join을 사용하여 OS 독립적인 경로를 생성합니다.
         base_dir = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(base_dir, file_path)
         
+        # 파일이 존재하는지 확인 (추가적인 디버깅 정보)
+        if not os.path.exists(full_path):
+            raise FileNotFoundError(f"File does not exist at path: {full_path}")
+
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
-    except FileNotFoundError:
+    except FileNotFoundError as fnf_error:
         # 파일을 찾지 못했을 경우 명확한 오류 메시지 출력
-        st.error(f"❌ 오류: '{file_path}' 파일을 찾을 수 없습니다.")
-        st.info(f"시도된 경로: {full_path}")
+        st.error(f"❌ 오류: '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해주세요.")
+        st.info(f"시도된 경로: {fnf_error}")
         st.markdown("💡 'htmls' 디렉토리가 'app.py'와 같은 위치에 있는지 확인해주세요.")
         return None
     except Exception as e:
@@ -110,6 +114,7 @@ def handle_html_event(value):
             st.session_state.auth_message = f"인증 오류: {data.get('message', '알 수 없는 오류')}"
         
         elif event_type == 'SIGNUP_SUCCESS':
+            # 회원가입 성공 시 메시지를 표시하고 로그인 페이지로 이동
             message = f"회원가입 성공: {data.get('email', '')}. 로그인 페이지로 이동합니다."
             navigate(PAGE_LOGIN, message=message)
 
@@ -168,10 +173,12 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         
         try:
             # HTML 컴포넌트 렌더링
+            # key를 사용하여 Streamlit이 컴포넌트를 강제로 업데이트하도록 유도합니다.
             component_value = st.components.v1.html(
                 js_variables + html_content,
                 height=800, 
-                scrolling=True, 
+                scrolling=True,
+                key=st.session_state.current_page # 현재 페이지 이름으로 key를 설정
             )
             
             # 반환된 값이 유효한 딕셔너리일 때만 이벤트 처리 함수 호출
@@ -179,13 +186,12 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                 handle_html_event(component_value)
                 
         except TypeError as e:
-            # Streamlit 컴포넌트 내부 오류 처리
-            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다.")
+            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 키워드 인수가 잘못되었을 수 있습니다.")
             st.code(f"Error details: {e}", language='python')
         except Exception as e:
              st.error(f"🚨 알 수 없는 렌더링 오류: {e}")
     else:
-        # read_html_file에서 오류가 발생했을 경우
+        # read_html_file에서 오류가 발생했을 경우 (이미 오류 메시지 출력됨)
         pass 
     
 else:
