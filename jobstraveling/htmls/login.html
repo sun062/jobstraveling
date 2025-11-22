@@ -158,14 +158,10 @@
         </div>
         
         <div class="mt-6 text-center text-sm">
-            <!-- 🚨 이 부분을 수정하여 Streamlit으로 'signup' 페이지로 이동하는 이벤트를 보냅니다. -->
+            <!-- 회원가입 버튼만 남기고 '비밀번호 찾기' 링크는 삭제 -->
             <a href="#" onclick="sendToStreamlit('NAVIGATE_TO', { page: 'signup' }); return false;" 
                class="font-medium text-indigo-600 hover:text-indigo-500 transition duration-150">
                 회원가입
-            </a>
-            <span class="text-gray-400 mx-2">|</span>
-            <a href="#" class="font-medium text-gray-600 hover:text-gray-500 transition duration-150">
-                비밀번호 찾기
             </a>
         </div>
     </div>
