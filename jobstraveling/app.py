@@ -18,6 +18,7 @@ try:
     # JavaScript로 전달하기 위해 JSON 문자열 자체를 준비
     FIREBASE_CONFIG_JSON_STRING = config_str
 except Exception:
+    # 이 오류는 Python에서 처리되므로, JS로 전달되지 않습니다.
     st.error("FATAL ERROR: Firebase Configuration string is invalid.")
 
 
@@ -44,21 +45,13 @@ def read_html_file(file_path):
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        error_html = f"""
-        <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px; font-family: sans-serif;">
-            <h3 style="color: #c00;">[파일 로드 오류]</h3>
-            <p><strong>오류:</strong> '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해 주세요.</p>
-        </div>
-        """
-        return error_html
+        # 파일이 없을 경우 오류 메시지를 반환합니다. 이 메시지는 HTML이 아니므로, 
+        # 호출하는 측에서 안정적인 HTML이 로드되지 않았음을 판단할 수 있도록 None이나 빈 문자열을 반환해야 합니다.
+        st.error(f"[파일 로드 오류] '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해 주세요.")
+        return None
     except Exception as e:
-        error_html = f"""
-        <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px; font-family: sans-serif;">
-            <h3 style="color: #c00;">[파일 읽기 중 오류]</h3>
-            <p><strong>오류:</strong> {e}</p>
-        </div>
-        """
-        return error_html
+        st.error(f"[파일 읽기 중 오류] 오류: {e}")
+        return None
 
 # --- 3. Streamlit 앱 상태 및 흐름 관리 ---
 
@@ -138,11 +131,13 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
     # 안정적인 HTML 콘텐츠 로드 시도
     html_content = read_html_file(page_file)
     
-    if html_content:
+    # ***핵심 수정: html_content가 None이 아닐 경우에만 컴포넌트 렌더링***
+    if html_content is not None:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
         js_variables = f"""
         <script>
             // JSON 문자열로 주입됩니다. JS에서 JSON.parse를 사용하여 객체로 변환해야 합니다.
+            // Python의 json.dumps()는 JS의 문자열 리터럴로 변환됩니다.
             window.firebaseConfigJsonString = {json.dumps(FIREBASE_CONFIG_JSON_STRING)};
             
             // initialAuthToken은 문자열 또는 None이므로, 안전하게 주입합니다.
@@ -166,6 +161,7 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         """
         
         # Streamlit HTML 컴포넌트 렌더링
+        # line 169
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
@@ -177,6 +173,9 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         # 반환된 값이 있으면 이벤트 처리 함수 호출
         if component_value:
             handle_html_event(component_value)
+    else:
+        # read_html_file에서 오류가 발생했을 경우 (이미 st.error가 호출됨)
+        pass # 추가적인 렌더링 오류 메시지 없이 빠져나갑니다.
     
 else:
     if not FIREBASE_CONFIG_JSON_STRING:
