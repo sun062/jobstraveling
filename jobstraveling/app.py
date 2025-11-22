@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
-from datetime import date, timedelta, datetime # datetime 모듈 추가
+from datetime import date, datetime 
 
 # --- 1. 환경 설정 및 세션 상태 초기화 ---
 st.set_page_config(layout="centered", initial_sidebar_state="expanded")
@@ -19,22 +19,17 @@ if 'user_data' not in st.session_state:
 if 'is_auth_ready' not in st.session_state:
     st.session_state.is_auth_ready = False # Firebase 초기화 상태 (현재는 우회)
 
-# --- 2. HTML 파일 로드 함수 ---
+# --- 2. HTML 파일 로드 함수 (경로 오류 수정 완료) ---
 def read_html_file(file_name):
-    """HTML 파일을 읽어 문자열로 반환합니다."""
-    # 파일 경로를 os.path.join을 사용하여 안전하게 조합
-    file_path = os.path.join(os.path.dirname(__file__), 'htmls', file_name)
+    """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
+    # 현재 실행 파일(app.py)의 디렉토리를 기준으로 'htmls' 폴더 내의 파일을 찾습니다.
+    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'htmls', file_name)
     try:
-        # 현재 환경에서는 'htmls' 폴더 없이 현재 디렉토리에 있다고 가정
-        # 실제 환경에 맞게 경로를 조정해주세요.
-        if os.path.exists(file_name):
-             with open(file_name, 'r', encoding='utf-8') as f:
-                return f.read()
-        else:
-            # 기본 경로에서 파일을 찾지 못하면 오류 메시지 반환
-            return ""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
     except FileNotFoundError:
-        st.error(f"HTML 파일을 찾을 수 없습니다: {file_name}")
+        # 오류 메시지에 정확한 파일 경로를 표시하여 디버깅을 돕습니다.
+        st.error(f"HTML 파일을 찾을 수 없습니다. 경로를 확인해주세요: {file_path}")
         return ""
 
 # --- 3. 페이지 전환 및 이벤트 처리 ---
@@ -50,56 +45,25 @@ def handle_component_event(component_value):
         payload = component_value.get('payload', {})
 
         if event_type == 'NAVIGATE_TO':
-            # HTML 컴포넌트에서 받은 페이지 전환 요청 처리
             target_page = payload.get('page')
             if target_page in [PAGE_LOGIN, PAGE_SIGNUP, PAGE_HOME]:
                 navigate(target_page)
         
         elif event_type == 'LOGIN_SUCCESS':
-            # 로그인 성공 시 사용자 데이터 저장 및 홈 화면으로 전환
             st.session_state.user_data = payload.get('userData')
             navigate(PAGE_HOME)
 
         elif event_type == 'SIGNUP_SUCCESS':
-            # 회원가입 성공 시 로그인 화면으로 전환
             st.session_state.user_data = None 
             navigate(PAGE_LOGIN)
 
 # --- 4. 페이지 렌더링 함수 ---
 
-def render_html(html_file_name, height=600):
-    """HTML 컴포넌트를 렌더링하고, 반환 값을 이벤트 핸들러로 전달합니다."""
-    # 이 환경에서는 htmls/login.html 파일을 직접 읽을 수 없으므로, 
-    # Streamlit은 현재 파일을 로드하는 기능을 지원하지 않아 임시로 파일 내용을 직접 넣을 수 없습니다.
-    # GitHub에 업로드하실 때는 login.html 파일도 함께 업로드하셔야 합니다.
-    
-    # 임시 HTML 콘텐츠 (실제 코드가 아닙니다. GitHub에 올리실 때는 'login.html'을 별도 파일로 올리셔야 합니다.)
-    if html_file_name == 'login.html':
-         html_content = """
-         <div style="text-align: center; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
-             <h3>로그인 페이지 (HTML 파일 별도 확인 필요)</h3>
-             <p>실제 로직은 login.html 파일에 있습니다.</p>
-             <button onclick="window.parent.postMessage({'type': 'NAVIGATE_TO', 'payload': {'page': 'signup'}}, '*')">회원가입 페이지로</button>
-         </div>
-         """
-    else:
-        return
-
-    component_value = components.html(
-        html_content,
-        height=height,
-        scrolling=True,
-    )
-
-    # HTML 컴포넌트에서 값이 반환되면 이벤트 처리 함수 호출
-    if component_value is not None:
-        handle_component_event(component_value)
-
 def render_login_page():
     """로그인 페이지를 렌더링합니다."""
     st.title("로그인")
     
-    # HTML 파일을 직접 읽어 컴포넌트로 렌더링 (이전 로직 복원)
+    # HTML 파일을 읽어 컴포넌트로 렌더링
     html_content = read_html_file('login.html')
     if html_content:
         component_value = components.html(
@@ -110,7 +74,7 @@ def render_login_page():
         if component_value is not None:
             handle_component_event(component_value)
     else:
-        st.info("HTML 파일을 찾을 수 없습니다. GitHub에 'htmls/login.html' 파일을 확인해주세요.")
+        st.info("HTML 파일을 로드하지 못했습니다. 위의 에러 메시지를 확인해주세요.")
     
     # 로그인 화면일 때만 사이드바에 회원가입 버튼 표시
     st.sidebar.header("새 계정 만들기")
@@ -118,7 +82,7 @@ def render_login_page():
         navigate(PAGE_SIGNUP)
 
 def render_signup_page():
-    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (UI 및 유효성 검사 반영)"""
+    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (UI, 유효성 검사 적용)"""
     st.title("회원가입")
 
     # 오늘 날짜
@@ -126,13 +90,13 @@ def render_signup_page():
     # 최소 생년월일 (2007년 1월 1일)
     min_date = date(2007, 1, 1)
     
-    # 기본 생년월일 설정 (예: 2007년생이 현재 고등학생이라면 2007년 1월 1일로 설정)
+    # 기본 생년월일 설정
     default_birth_date = min_date
 
     with st.form("signup_form"):
         st.write("사용자 정보를 입력해주세요.")
         
-        # 1. 이메일 레이블 수정 ("아이디" -> "이메일")
+        # 이메일 레이블 수정 완료
         email = st.text_input("이메일 (ID)", key="signup_email")
         password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
         st.markdown("---")
@@ -140,7 +104,7 @@ def render_signup_page():
         class_number = st.text_input("반 번호", key="signup_class")
         student_name = st.text_input("이름", key="signup_name")
         
-        # 2. 생년월일 유효성 검사 적용 (2007년 1월 1일 ~ 오늘 날짜)
+        # 생년월일 유효성 검사 적용 (2007년 1월 1일 ~ 오늘 날짜)
         birth_date = st.date_input(
             "생년월일", 
             value=default_birth_date, # 기본값
@@ -150,7 +114,6 @@ def render_signup_page():
             format="YYYY.MM.DD"
         )
         
-        # 버튼
         submitted = st.form_submit_button("회원가입 완료")
 
         if submitted:
@@ -163,12 +126,12 @@ def render_signup_page():
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
                 # **********************************************
-                # 실제 Firebase 저장 로직은 이 환경에서 실행 불가하므로,
-                # 시연을 위해 성공적으로 처리된 것으로 간주하고 페이지 전환
+                # 현재는 Firebase 통신 오류를 우회하기 위한 가상 성공 처리 로직입니다.
+                # 실제 데이터 저장은 이루어지지 않으며 페이지 전환만 진행됩니다.
                 # **********************************************
                 st.success(f"{student_name}님, 회원가입이 완료되었습니다! 로그인해 주세요.")
                 
-                # 가상의 사용자 데이터 (실제 저장되는 데이터 형태를 가정)
+                # 가상의 사용자 데이터 저장
                 fake_user_data = {
                     'email': email,
                     'schoolName': school_name,
@@ -180,7 +143,6 @@ def render_signup_page():
                 
                 # 페이지 전환
                 navigate(PAGE_LOGIN)
-                st.session_state.current_page = PAGE_LOGIN # navigate 호출 후 session state를 직접 변경하는 것은 안전하지 않으나, 여기서는 시연을 위해 유지
 
     st.markdown("---")
     if st.button("로그인 화면으로 돌아가기", key="back_to_login_btn"):
