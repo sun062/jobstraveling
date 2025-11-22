@@ -20,9 +20,17 @@ if 'user_data' not in st.session_state:
 if 'is_auth_ready' not in st.session_state:
     st.session_state.is_auth_ready = False 
 if 'mock_user' not in st.session_state:
-    st.session_state.mock_user = None # 모의 로그인 데이터를 저장하는 세션 상태 추가
+    # 모의 로그인 데이터를 저장하는 세션 상태 추가 (기본값 설정)
+    st.session_state.mock_user = {
+        'email': 'user@example.com',
+        'password': 'password123',
+        'schoolName': '가상고등학교',
+        'classNumber': '301',
+        'studentName': '홍길동',
+        'birthDate': '2007-01-01'
+    } 
 
-# --- 2. HTML 파일 로드 함수 (경로 오류 수정 완료) ---
+# --- 2. HTML 파일 로드 함수 (더 이상 사용하지 않지만 구조 유지를 위해 남겨둠) ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'htmls', file_name)
@@ -39,69 +47,61 @@ def navigate(page):
     st.session_state.current_page = page
     st.rerun()
 
-def handle_component_event(component_value):
-    """HTML 컴포넌트에서 받은 이벤트를 처리합니다."""
-    if component_value and isinstance(component_value, dict):
-        event_type = component_value.get('type')
-        payload = component_value.get('payload', {})
-
-        if event_type == 'NAVIGATE_TO':
-            target_page = payload.get('page')
-            if target_page in [PAGE_LOGIN, PAGE_SIGNUP, PAGE_HOME]:
-                navigate(target_page)
-        
-        elif event_type == 'LOGIN_SUCCESS':
-            # 로그인 성공 이벤트 수신 시 홈 페이지로 이동합니다.
-            st.session_state.user_data = payload.get('userData')
-            # st.rerun()을 포함하는 navigate 함수 호출
-            navigate(PAGE_HOME)
-
-        elif event_type == 'SIGNUP_SUCCESS':
-            st.session_state.user_data = None 
-            navigate(PAGE_LOGIN)
+# HTML 컴포넌트 방식 사용 중단: handle_component_event 함수 삭제
 
 # --- 4. 페이지 렌더링 함수 ---
 
 def render_login_page():
-    """로그인 페이지를 렌더링하고 Mock 데이터를 HTML에 주입합니다."""
+    """
+    로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다.
+    (HTML 컴포넌트의 통신 오류를 해결하기 위해 통합)
+    """
     st.title("로그인")
     
-    # Mock 사용자 데이터 준비
-    mock_data = st.session_state.get('mock_user', None)
-    mock_user_json = json.dumps(mock_data) if mock_data else 'null'
-    
-    # HTML 파일을 읽어 컴포넌트로 렌더링
-    html_content = read_html_file('login.html')
-    
-    if html_content:
-        # ** Mock 데이터 주입 **
-        html_content = html_content.replace(
-            '// MOCK_USER_PLACEHOLDER',
-            f'const MOCK_USER_DATA = {mock_user_json};'
-        )
-        
-        component_value = components.html(
-            html_content,
-            height=500,
-            scrolling=True,
-            # Streamlit이 HTML 컴포넌트의 반환 값을 명시적으로 기다리도록 설정
-            # 이는 커스텀 컴포넌트가 Python으로 데이터를 보낼 때 안정성을 높이는 데 도움이 됩니다.
-        )
-        
-        # <<<<<<<<< 핵심 수정: HTML 컴포넌트의 반환 값을 확인하고 처리 >>>>>>>>>
-        # Streamlit은 HTML의 postMessage를 받으면 이 값을 반환합니다.
-        if component_value is not None and isinstance(component_value, dict):
-            # component_value가 딕셔너리 형태일 때만 이벤트 처리 함수 호출
-            handle_component_event(component_value)
-        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # 중앙 정렬을 위한 컨테이너
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # 로그인 폼
+        with st.form("login_form", clear_on_submit=False):
+            st.markdown('<h3 style="text-align: center; color: #3b82f6;">Job-Trekking 로그인</h3>', unsafe_allow_html=True)
             
-    else:
-        st.info("HTML 파일을 로드하지 못했습니다. 위의 에러 메시지를 확인해주세요.")
-    
-    # 로그인 화면일 때만 사이드바에 회원가입 버튼 표시
-    st.sidebar.header("새 계정 만들기")
-    if st.sidebar.button("회원가입"):
-        navigate(PAGE_SIGNUP)
+            # Mock 사용자 정보 미리보기 (디버깅용)
+            mock_user = st.session_state.mock_user
+            st.info(f"💡 **Mock 계정:**\n- **이메일:** `{mock_user['email']}`\n- **비밀번호:** `{mock_user['password']}`")
+            
+            email = st.text_input("이메일 주소", key="login_email")
+            password = st.text_input("비밀번호", type="password", key="login_password")
+            
+            login_submitted = st.form_submit_button("로그인")
+            
+            if login_submitted:
+                # 1. 유효성 검사
+                if not all([email, password]):
+                    st.error("이메일과 비밀번호를 모두 입력해 주세요.")
+                    return
+                
+                # 2. Mock 로그인 처리 (실제 DB 연동은 이 위치에 구현 예정)
+                if (st.session_state.mock_user and 
+                    st.session_state.mock_user['email'] == email and 
+                    st.session_state.mock_user['password'] == password):
+                    
+                    st.success("모의 로그인 성공! 홈 화면으로 이동합니다.")
+                    
+                    # Mock 사용자 데이터에서 민감 정보(password) 제거 후 저장
+                    user_data = {**st.session_state.mock_user}
+                    user_data.pop('password', None)
+                    st.session_state.user_data = user_data
+                    
+                    # 페이지 전환 (st.rerun()을 포함)
+                    navigate(PAGE_HOME)
+                    
+                else:
+                    st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
+
+        # 회원가입 버튼 (폼 밖에서 네이티브 버튼으로 처리)
+        if st.button("회원가입", key="navigate_to_signup"):
+            navigate(PAGE_SIGNUP)
+
 
 def render_signup_page():
     """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
@@ -110,8 +110,6 @@ def render_signup_page():
     # 오늘 날짜와 최소 날짜 설정 (2007년 1월 1일)
     today = date.today()
     min_date = date(2007, 1, 1)
-    
-    # 기본 생년월일 설정 (2007년 1월 1일)
     default_birth_date = min_date
 
     with st.form("signup_form"):
@@ -146,9 +144,10 @@ def render_signup_page():
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
                 # Mock 데이터 저장 및 성공 처리
+                # 이 데이터는 이후 로그인 검증에 사용됩니다.
                 st.session_state.mock_user = {
                     'email': email,
-                    'password': password, 
+                    'password': password, # Mock 검증을 위해 임시 저장
                     'schoolName': school_name,
                     'classNumber': class_number,
                     'studentName': student_name,
