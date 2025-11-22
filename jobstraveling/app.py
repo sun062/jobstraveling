@@ -141,10 +141,10 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
         # JavaScript 문자열 리터럴로 안전하게 주입하기 위해 다시 한번 json.dumps() 사용
-        # (이로 인해 JS에서는 JSON.parse가 필요함)
         js_variables = f"""
         <script>
             // JSON 문자열로 주입됩니다. JS에서 JSON.parse를 사용하여 객체로 변환해야 합니다.
+            // Python의 json.dumps()는 JS의 문자열 리터럴로 변환됩니다.
             window.firebaseConfigJsonString = {json.dumps(FIREBASE_CONFIG_JSON_STRING)};
             
             // initialAuthToken은 문자열 또는 None이므로, 안전하게 주입합니다.
