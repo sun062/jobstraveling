@@ -16,9 +16,9 @@
         
         setLogLevel('Debug');
 
+        // MOCK_USER_PLACEHOLDER
+        
         // 전역 변수 설정 (캔버스 환경에서 제공)
-        // **중요: 만약 __firebase_config가 정의되지 않았다면, 아래에 사용자님의 실제 Firebase Config를 직접 입력하여 테스트할 수 있습니다.**
-        // **주의: 이 방법은 보안에 취약하므로, 실제 서비스에서는 환경 변수나 서버를 통해 전달해야 합니다.**
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
@@ -28,7 +28,6 @@
                 firebaseConfig = JSON.parse(__firebase_config);
             } catch (e) {
                 console.error("Firebase config 파싱 오류:", e);
-                // JSON.parse 실패 시 null 유지
             }
         }
         
@@ -105,6 +104,33 @@
                 messageDiv.textContent = '이메일과 비밀번호를 모두 입력해 주세요.';
                 messageDiv.classList.add('bg-red-100', 'text-red-700');
                 return;
+            }
+            
+            // ----------------------------------------------------
+            // MOCK LOGIN CHECK (가장 최근에 회원가입한 정보로 로그인 시도)
+            // ----------------------------------------------------
+            if (typeof MOCK_USER_DATA !== 'undefined' && MOCK_USER_DATA !== null) {
+                if (MOCK_USER_DATA.email === email && MOCK_USER_DATA.password === password) {
+                    messageDiv.textContent = '모의 로그인 성공! 홈 화면으로 이동합니다.';
+                    messageDiv.classList.add('bg-green-100', 'text-green-700');
+                    
+                    // Mock 데이터에서 비밀번호를 제거하고 사용자 데이터만 구성
+                    const userData = { ...MOCK_USER_DATA };
+                    delete userData.password;
+                    
+                    postMessageToParent('LOGIN_SUCCESS', { userData: userData });
+                    return;
+                }
+            }
+            // ----------------------------------------------------
+            // REAL FIREBASE LOGIN ATTEMPT (Mock 실패 시에만 시도)
+            // ----------------------------------------------------
+
+            // Mock 로그인도 실패했고, Firebase 초기화도 안 됐다면 실제 로그인 시도 불가
+            if (!auth) {
+                 messageDiv.textContent = 'Firebase 초기화 문제로 실제 로그인 시도 불가.';
+                 messageDiv.classList.add('bg-red-100', 'text-red-700');
+                 return;
             }
 
             try {
@@ -198,12 +224,13 @@
                     document.getElementById('message').classList.add('bg-red-100', 'text-red-700');
                 }
             } else {
-                 // **이 부분이 오류 메시지를 출력하는 곳이며, Firebase 설정 누락 문제에 대한 안내를 제공합니다.**
+                 // Firebase 설정 정보 누락 시
                  console.error("Firebase 설정 정보가 없습니다.");
-                 document.getElementById('message').textContent = '[Firebase 설정 정보 누락] GitHub에 올릴 때만 발생하는 문제입니다. 기능 시연은 가능합니다.';
+                 document.getElementById('message').textContent = '[Firebase 설정 정보 누락] Mock 기능을 사용하거나, 설정 정보로 대체해주세요.';
                  document.getElementById('message').classList.add('bg-orange-100', 'text-orange-700');
-                 // 설정이 없어도 버튼은 비활성화하여 Streamlit으로의 전환만 가능하게 함 (로그인 시도는 불가)
-                 document.getElementById('login-button').disabled = true; 
+                 // Mock 로그인 시도는 가능해야 하므로 버튼을 활성화 상태로 유지하거나, Mock 데이터를 기반으로 판단해야 함
+                 // 여기서는 Mock 데이터가 있으면 로그인 시도는 허용합니다.
+                 document.getElementById('login-button').disabled = false; 
             }
         }
 
