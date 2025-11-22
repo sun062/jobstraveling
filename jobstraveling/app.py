@@ -73,7 +73,7 @@ def handle_js_message(message):
         st.toast(message.get('message'), icon="✅" if message.get('success') else "❌")
 
 
-# --- 3. HTML/JS 컨텐츠 정의 (f-string SyntaxError 수정됨) ---
+# --- 3. HTML/JS 컨텐츠 정의 ---
 
 # Firebase 및 Tailwind CSS 로드
 CORE_SCRIPTS = f"""
@@ -315,9 +315,9 @@ MOCK_PROGRAMS = [
     },
 ]
 
-# 프로그램 카드 템플릿 - **f-string 오류 수정 (중괄호 이스케이프)**
+# 프로그램 카드 템플릿 - 중괄호 이스케이프
 PROGRAM_CARD_TEMPLATE = f"""
-    <div class="bg-white p-4 rounded-xl card-shadow flex flex-col transition duration-300 hover:shadow-lg cursor-pointer" onclick="sendStreamlitMessage('DB_OPERATION_RESULT', {{ success: true, message: '프로그램 상세 보기 기능 (ID: ${{program.id}})은 구현 예정입니다.' }})">
+    <div class="bg-white p-4 rounded-xl card-shadow flex flex-col transition duration-300 hover:shadow-lg cursor-pointer" onclick="sendStreamlitMessage('DB_OPERATION_RESULT', {{ success: true, message: '프로그램 상세 보기 기능 (ID: {{program.id}})은 구현 예정입니다.' }})">
         <div class="flex justify-between items-start mb-2">
             <h3 class="text-lg font-bold text-gray-800 truncate">{{{{program.title}}}}</h3>
             
@@ -335,18 +335,18 @@ PROGRAM_CARD_TEMPLATE = f"""
     </div>
 """
 
-# 프로그램 목록을 동적으로 생성하는 JavaScript
-PROGRAM_JS = f"""
+# 프로그램 목록을 동적으로 생성하는 JavaScript - **PROGRAM_JS를 일반 문자열로 변경**
+PROGRAM_JS = """
 <script>
-    const mockPrograms = JSON.parse('{json.dumps(MOCK_PROGRAMS)}');
-    const template = `{PROGRAM_CARD_TEMPLATE.replace('`', '\\`')}`; // JS 템플릿 리터럴로 변환
+    const mockPrograms = JSON.parse('""" + json.dumps(MOCK_PROGRAMS) + """');
+    const template = `""" + PROGRAM_CARD_TEMPLATE.replace('`', '\\`') + """`; // JS 템플릿 리터럴로 변환
 
-    function renderPrograms() {{
+    function renderPrograms() {
         const container = document.getElementById('program-list');
         if (!container) return;
         container.innerHTML = '';
         
-        mockPrograms.forEach(program => {{
+        mockPrograms.forEach(program => {
             // EJS/Handlebars 스타일 대신, JS 템플릿 리터럴로 변환하여 렌더링
             let html = template;
             html = html.replace(/{{program.title}}/g, program.title);
@@ -355,20 +355,19 @@ PROGRAM_JS = f"""
             html = html.replace(/{{program.region}}/g, program.region);
             html = html.replace(/{{program.date}}/g, program.date);
             html = html.replace(/{{program.progress}}/g, program.progress);
+            html = html.replace(/{{program.id}}/g, program.id);
             
-            // 클래스 조건부 렌더링 (f-string 수정 부분의 실제 JS 로직)
+            // 클래스 조건부 렌더링을 위한 정규식 치환
             const typeClass = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
             const progressClass = program.progress === '접수 중' ? 'text-blue-500' : program.progress === '마감 임박' ? 'text-orange-500' : 'text-gray-400';
             
-            html = html.replace(/\$\{program.type === '진로' \? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700'\}/g, typeClass);
-            html = html.replace(/\$\{program.progress === '접수 중' \? 'text-blue-500' : program.progress === '마감 임박' \? 'text-orange-500' : 'text-gray-400'\}/g, progressClass);
+            // 정규 표현식 자체를 문자열로 치환. 오류가 났던 정규식 패턴을 일반 문자열로 대체하여 파이썬 f-string 문제를 우회합니다.
+            html = html.replace(/\\$\\{program.type === '진로' \\? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700'\\}/g, typeClass);
+            html = html.replace(/\\$\\{program.progress === '접수 중' \\? 'text-blue-500' : program.progress === '마감 임박' \\? 'text-orange-500' : 'text-gray-400'\\}/g, progressClass);
             
-            // ID도 추가
-            html = html.replace(/\$\{program.id\}/g, program.id);
-
             container.innerHTML += html;
-        }});
-    }}
+        });
+    }
 
     document.addEventListener('DOMContentLoaded', renderPrograms);
 </script>
@@ -482,7 +481,6 @@ else:
         html_content,
         height=800,
         scrolling=True,
-        # key=current_page # 이전 오류를 피하기 위해 key 인수는 제거함
     )
 
     # 컴포넌트로부터 수신된 메시지를 처리합니다.
