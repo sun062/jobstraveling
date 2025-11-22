@@ -3,422 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>잡스트레블링 - 홈</title>
+    <title>진로 탐색 홈</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: #f0f4f8; 
-            min-height: 100vh;
-        }
-        .header-bg {
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        }
-        .program-card {
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .program-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
-        .tag-active {
-            background-color: #2563eb; /* Blue 700 */
-            color: white;
-            border-color: #2563eb;
-        }
-        .tag-inactive {
-            background-color: #e0f2f7; /* Light Cyan */
-            color: #0c4a6e; /* Cyan 900 */
-            border-color: #bae6fd; /* Cyan 200 */
-        }
-    </style>
-</head>
-<body class="p-0">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
-    <!-- 1. 상단 헤더 및 검색 바 -->
-    <header class="header-bg p-4 shadow-lg sticky top-0 z-10">
-        <div class="max-w-4xl mx-auto flex justify-between items-center text-white">
-            <h1 class="text-2xl font-bold">🗺️ Job-Trekking 홈</h1>
-            <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition">
+        setLogLevel('Debug');
+        
+        let auth;
+        let db;
+        let userId;
+        let userProfile = {};
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const app = initializeApp(window.firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user && user.isAnonymous === false) {
+                        userId = user.uid;
+                        document.getElementById('user-id-display').textContent = userId;
+                        
+                        // 1. 사용자 프로필 로드 (회원가입 시 입력된 학교 정보)
+                        await loadUserProfile(userId);
+
+                        // 2. 프로그램 목록 로드 (샘플)
+                        await loadPrograms();
+
+                    } else {
+                        // 사용자가 로그아웃되었거나 익명 사용자일 경우 로그인 페이지로 강제 이동
+                        sendToStreamlit('LOGOUT_SUCCESS');
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase 초기화 또는 인증 오류:", error);
+                sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
+            }
+        });
+
+        async function loadUserProfile(uid) {
+            const docRef = doc(db, "artifacts", window.appId, "users", uid, "profile", "data");
+            try {
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    userProfile = docSnap.data();
+                    document.getElementById('welcome-message').textContent = 
+                        `${userProfile.schoolName} ${userProfile.grade} 학생 환영합니다!`;
+                } else {
+                    document.getElementById('welcome-message').textContent = `환영합니다! (프로필 데이터 없음)`;
+                }
+            } catch (error) {
+                console.error("사용자 프로필 로드 오류:", error);
+            }
+        }
+
+        async function loadPrograms() {
+            const programsContainer = document.getElementById('programs-list');
+            programsContainer.innerHTML = '<p class="text-gray-500">진로 프로그램 데이터를 로드하는 중...</p>';
+
+            // Firestore 샘플 데이터 로드 (공개 데이터 컬렉션 경로 사용)
+            // 실제 구현 시 'programs' 컬렉션에 데이터가 있어야 합니다.
+            const programsColRef = collection(db, "artifacts", window.appId, "public", "data", "programs");
+            
+            // 🚨 실제로는 여기에 학교 정보나 관심사에 기반한 쿼리가 추가됩니다.
+            try {
+                const q = query(programsColRef);
+                const querySnapshot = await getDocs(q);
+                
+                let programHtml = '';
+                if (querySnapshot.empty) {
+                    programHtml = '<p class="text-gray-500 p-4 bg-yellow-50 rounded-lg">현재 등록된 진로 프로그램이 없습니다.</p>';
+                } else {
+                    querySnapshot.forEach((doc) => {
+                        const data = doc.data();
+                        programHtml += `
+                            <div class="p-4 border-b hover:bg-gray-50 transition duration-150">
+                                <h4 class="font-semibold text-blue-600">${data.title || '제목 없음'}</h4>
+                                <p class="text-sm text-gray-500">${data.location || '위치 정보 없음'} | ${data.date || '날짜 미정'}</p>
+                                <button class="mt-2 text-xs text-indigo-500 hover:text-indigo-700">자세히 보기 &gt;</button>
+                            </div>
+                        `;
+                    });
+                }
+                programsContainer.innerHTML = programHtml;
+
+            } catch (error) {
+                console.error("프로그램 목록 로드 오류:", error);
+                programsContainer.innerHTML = `<p class="text-red-500 p-4 bg-red-100 rounded-lg">프로그램 데이터 로드 중 오류 발생: ${error.message}</p>`;
+            }
+        }
+
+        window.logout = async () => {
+            try {
+                await signOut(auth);
+                // Streamlit에 로그아웃 성공 이벤트 전송
+                sendToStreamlit('LOGOUT_SUCCESS');
+            } catch (error) {
+                console.error("로그아웃 오류:", error);
+                // alert 대신 메시지 박스 사용 필요
+                sendToStreamlit('AUTH_ERROR', { message: `로그아웃 실패: ${error.message}` });
+            }
+        };
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8" style="font-family: 'Inter', sans-serif;">
+    <div class="w-full max-w-6xl mx-auto bg-white p-10 rounded-xl shadow-2xl space-y-8">
+        <!-- 헤더 및 로그아웃 -->
+        <div class="flex justify-between items-center pb-4 border-b">
+            <div>
+                <h1 class="text-3xl font-extrabold text-gray-900">💼 잡스트레블링 (Job-Trekking)</h1>
+                <p id="welcome-message" class="text-xl text-gray-600 mt-1">로그인 정보 확인 중...</p>
+                <p class="text-xs text-gray-400 mt-1">사용자 ID: <span id="user-id-display">N/A</span></p>
+            </div>
+            <button onclick="logout()" 
+                    class="px-5 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 shadow-md">
                 로그아웃
             </button>
         </div>
-        
-        <!-- 선택형 검색 입력 영역 -->
-        <div class="max-w-4xl mx-auto mt-4 grid grid-cols-2 gap-3">
-            
-            <!-- 지역 선택 박스 -->
-            <div id="regionSelectBox" onclick="showRegionModal()" 
-                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
-                <span id="selectedRegionText" class="truncate font-medium text-gray-600">지역 선택 (필수)</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </div>
 
-            <!-- 분야 선택 박스 -->
-            <div id="fieldSelectBox" onclick="showFieldModal()" 
-                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
-                <span id="selectedFieldText" class="truncate font-medium text-gray-600">분야 선택 (다중 선택 가능)</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </div>
-        </div>
-
-        <!-- 현재 검색 조건 표시 및 초기화 버튼 -->
-        <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
-             <div id="currentFilters" class="text-sm text-white font-light">
-                <!-- 선택된 필터가 여기에 표시됩니다. -->
-             </div>
-             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition text-white">
-                초기화
-            </button>
-        </div>
-    </header>
-
-    <!-- 2. 프로그램 목록 -->
-    <main class="max-w-4xl mx-auto p-4 sm:p-8">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">⭐ 프로그램 검색 결과</h2>
-        
-        <div id="programList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- 프로그램 카드가 JS에 의해 여기에 삽입됩니다. -->
-        </div>
-    </main>
-
-    <!-- 3. Footer (선택 사항) -->
-    <footer class="text-center text-gray-500 text-sm py-6 border-t mt-10">
-        © 2024 Job-Trekking | 모든 프로그램 정보는 주관사에 귀속됩니다.
-    </footer>
-    
-    <!-- 메시지 박스 (Firebase Error / Logout Confirm) -->
-    <div id="messageBox" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full text-center">
-            <p id="messageText" class="text-gray-800 font-medium mb-4"></p>
-            <button onclick="continueAction()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">확인</button>
-        </div>
-    </div>
-
-    <!-- 지역 선택 모달 -->
-    <div id="regionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
-            <h3 class="text-lg font-bold mb-4 border-b pb-2">지역 선택 (시/도)</h3>
-            <div id="regionOptions" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto">
-                <!-- 지역 버튼들이 여기에 생성됩니다. -->
-            </div>
-            <button onclick="hideRegionModal()" class="mt-6 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">닫기</button>
-        </div>
-    </div>
-
-    <!-- 분야 선택 모달 (다중 선택) -->
-    <div id="fieldModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
-            <h3 class="text-lg font-bold mb-4 border-b pb-2">분야 선택 (다중 선택)</h3>
-            <div id="fieldOptions" class="flex flex-wrap gap-2 max-h-80 overflow-y-auto">
-                <!-- 분야 태그들이 여기에 생성됩니다. -->
-            </div>
-            <button onclick="applyFieldSelection()" class="mt-6 w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">선택 완료</button>
-        </div>
-    </div>
-
-    <script type="module">
-        // Firebase 초기화 및 인증 로직
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        let db;
-        let auth;
-        let userId; 
-        let appId;
-        let isFirebaseReady = false; 
-        
-        // --- 상태 관리 변수 ---
-        let currentRegion = ""; 
-        let currentFields = []; 
-        
-        // Mock 데이터: 견학 및 진로 프로그램 목록 (필터링을 위해 'fields' 추가)
-        const MockPrograms = [
-            { id: 1, title: "서울시 IT 미래 인재 캠프", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울시+IT+캠프", img: "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", description: "IT 기술 체험 및 현직자 멘토링 프로그램.", fields: ["AI/IT", "과학/기술"] },
-            { id: 2, title: "부산항만 공사 견학", region: "부산", type: "견학", url: "https://www.google.com/search?q=부산항만+견학", img: "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", description: "대한민국 최대 항만의 물류 흐름 체험.", fields: ["운송/물류", "사회/인문"] },
-            { id: 3, title: "경기 AI 로봇 체험관", region: "경기", type: "진로", url: "https://www.google.com/search?q=경기+AI+로봇", img: "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", description: "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", fields: ["AI/IT", "과학/기술", "기계/제조"] },
-            { id: 4, title: "광주 자동차 미래 산업 탐방", region: "광주", type: "견학", url: "https://www.google.com/search?q=광주+자동차+탐방", img: "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", description: "친환경 자동차 생산 라인 및 연구소 방문.", fields: ["기계/제조", "과학/기술"] },
-            { id: 5, title: "강원 환경보호 교육 캠페인", region: "강원", type: "진로", url: "https://www.google.com/search?q=강원+환경+캠페인", img: "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", description: "지속 가능한 환경과 관련된 직업군 탐색.", fields: ["생명/환경", "사회/인문"] },
-            { id: 6, title: "서울 고궁 문화 해설사 체험", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울+문화+해설사", img: "https://placehold.co/400x200/5a32a8/ffffff?text=Culture+Guide", description: "역사 해설 및 문화재 보존 체험.", fields: ["예술/문화", "사회/인문"] },
-            { id: 7, title: "대전 나노 반도체 특강", region: "대전", type: "진로", url: "https://www.google.com/search?q=대전+반도체+특강", img: "https://placehold.co/400x200/3498db/ffffff?text=Semiconductor", description: "미래 기술의 핵심, 반도체 제조 과정 이해.", fields: ["과학/기술", "AI/IT", "화학"] },
-        ];
-        
-        // 지역 및 분야 데이터
-        const Regions = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
-        const Fields = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"];
-
-        // --- Firebase 초기화 함수 ---
-        async function initializeFirebase() {
-            try {
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('Debug');
-                
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                
-                userId = auth.currentUser?.uid || crypto.randomUUID();
-                isFirebaseReady = true; 
-                console.log("Firebase initialized successfully. User ID:", userId);
-                
-                // Firebase 초기화 완료 후 페이지 로드 로직 실행
-                if (typeof onPageLoad === 'function') {
-                    onPageLoad(); 
-                }
-
-            } catch (error) {
-                console.error("Firebase initialization or sign-in failed:", error);
-            }
-        }
-        
-        // --- 유틸리티 함수 (메시지 박스) ---
-        function showMessage(text, action = null) {
-            const messageBox = document.getElementById('messageBox');
-            const messageText = document.getElementById('messageText');
-            
-            messageText.textContent = text;
-            window.nextAction = action; 
-            if (messageBox) messageBox.classList.remove('hidden');
-        }
-
-        function hideMessage() {
-            const messageBox = document.getElementById('messageBox');
-            if (messageBox) messageBox.classList.add('hidden');
-        }
-        
-        window.continueAction = function() { // 전역 함수로 등록
-            hideMessage();
-            if (typeof window.nextAction === 'function') {
-                window.nextAction(); 
-                window.nextAction = null; 
-            }
-        }
-
-        // Streamlit 관련 함수
-        function requestStreamlitLogout() {
-             showMessage('로그아웃 되었습니다.', () => {
-                 parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
-             });
-        }
-        
-        window.onload = initializeFirebase;
-        
-        // --- 프로그램 렌더링 및 필터링 로직 ---
-        
-        // 프로그램 카드를 생성하는 함수
-        function createProgramCard(program) {
-            const card = document.createElement('a');
-            // 요청대로 카드 클릭 시 해당 URL로 연결
-            card.href = program.url; 
-            card.target = "_blank"; 
-            card.className = "program-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer block border border-gray-100 hover:border-blue-300";
-            
-            // 프로그램 타입에 따른 색상 설정
-            const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
-
-            // 분야 태그 문자열 생성
-            const fieldTags = program.fields.map(field => 
-                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
-            ).join('');
-
-            card.innerHTML = `
-                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Placeholder';" alt="${program.title}" class="w-full h-40 object-cover">
-                <div class="p-4 space-y-2">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
-                        ${fieldTags}
-                    </div>
-                    <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
-                    <p class="text-sm text-gray-500">${program.description}</p>
-                    <p class="text-xs text-gray-400 font-medium flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        ${program.region}
-                    </p>
+        <!-- 지도 및 목록 섹션 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- 1. 지도 (Placeholder) -->
+            <div class="lg:col-span-2 bg-gray-200 h-96 rounded-xl shadow-inner flex items-center justify-center border-4 border-gray-300">
+                <div class="text-center text-gray-600 p-4">
+                    <div class="text-4xl mb-2">🗺️</div>
+                    <p class="font-bold">지도 기반 진로 탐색 영역</p>
+                    <p class="text-sm">실제 구현 시 이 위치에 지도(예: Kakao/Naver Map)가 표시됩니다.</p>
                 </div>
-            `;
+            </div>
 
-            return card;
-        }
+            <!-- 2. 프로그램 목록 -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-xl border border-gray-100">
+                <h3 class="text-2xl font-bold text-blue-700 mb-4 border-b pb-2">나에게 맞는 추천 프로그램</h3>
+                <div id="programs-list" class="space-y-2 max-h-[300px] overflow-y-auto">
+                    <!-- 프로그램 목록이 여기에 로드됩니다. -->
+                </div>
+                <button class="w-full mt-4 py-2 bg-blue-100 text-blue-600 font-medium rounded-lg hover:bg-blue-200 transition duration-150">
+                    전체 프로그램 더 보기
+                </button>
+            </div>
+        </div>
 
-        // 프로그램 목록을 렌더링하는 함수
-        function renderPrograms(programs) {
-            const container = document.getElementById('programList');
-            if (!container) return;
-
-            container.innerHTML = '';
-            
-            if (programs.length === 0) {
-                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다. 검색 조건을 변경해 보세요.</p>';
-                return;
-            }
-
-            programs.forEach(program => {
-                container.appendChild(createProgramCard(program));
-            });
-        }
-        
-        // 검색 필터링 함수 (지역 및 분야 기반)
-        window.filterPrograms = function() {
-            // 1. 선택된 지역과 분야를 기준으로 필터링
-            const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
-            const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
-
-            const filtered = MockPrograms.filter(program => {
-                // 지역 필터링
-                const regionMatch = !regionToFilter || program.region === regionToFilter;
-                
-                // 분야 필터링 (다중 선택된 분야 중 하나라도 프로그램의 분야와 일치하면 통과)
-                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => program.fields.includes(field));
-
-                return regionMatch && fieldMatch;
-            });
-
-            renderPrograms(filtered);
-            updateFilterDisplay();
-        }
-
-        // 현재 선택된 필터 표시를 업데이트하는 함수
-        function updateFilterDisplay() {
-            const regionText = currentRegion || "전국";
-            const fieldText = currentFields.length > 0 ? currentFields.join(', ') : "전체 분야";
-            
-            document.getElementById('selectedRegionText').textContent = currentRegion || "지역 선택 (필수)";
-            document.getElementById('selectedFieldText').textContent = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "분야 선택 (다중 선택 가능)";
-            
-            document.getElementById('currentFilters').innerHTML = `
-                현재 필터: <span class="font-bold">${regionText}</span> & <span class="font-bold">${fieldText}</span>
-            `;
-        }
-
-        // 필터 초기화 함수
-        window.resetFilters = function() {
-            currentRegion = "";
-            currentFields = [];
-            filterPrograms();
-            showMessage('검색 조건이 초기화되었습니다.');
-        }
-
-        // 페이지 로드 시 전체 프로그램 렌더링 및 UI 초기화
-        window.onPageLoad = function() {
-            // 기본적으로 전체 목록 렌더링
-            filterPrograms(); 
-            // 모달에 지역 및 분야 옵션 생성
-            createRegionOptions();
-            createFieldOptions();
-        }
-        
-        // --- 모달 관련 로직 ---
-
-        // 지역 모달 생성
-        function createRegionOptions() {
-            const container = document.getElementById('regionOptions');
-            Regions.forEach(region => {
-                const button = document.createElement('button');
-                button.textContent = region;
-                button.className = "p-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-500 hover:text-white transition text-sm font-medium";
-                button.onclick = () => selectRegion(region);
-                container.appendChild(button);
-            });
-        }
-
-        // 지역 선택 처리
-        function selectRegion(region) {
-            currentRegion = region;
-            hideRegionModal();
-            filterPrograms(); // 필터링 실행
-            updateFilterDisplay();
-        }
-
-        // 지역 모달 표시/숨기기
-        window.showRegionModal = function() {
-            if (!isFirebaseReady) {
-                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
-                 return;
-            }
-            document.getElementById('regionModal').classList.remove('hidden');
-        }
-
-        window.hideRegionModal = function() {
-            document.getElementById('regionModal').classList.add('hidden');
-        }
-
-        // 분야 모달 생성
-        function createFieldOptions() {
-            const container = document.getElementById('fieldOptions');
-            Fields.forEach(field => {
-                const button = document.createElement('button');
-                button.textContent = field;
-                button.setAttribute('data-field', field);
-                
-                // 초기 상태 설정
-                const isActive = currentFields.includes(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
-                
-                button.onclick = () => toggleField(field, button);
-                container.appendChild(button);
-            });
-        }
-        
-        // 분야 선택/해제 토글
-        function toggleField(field, button) {
-            const index = currentFields.indexOf(field);
-            if (index > -1) {
-                // 선택 해제
-                currentFields.splice(index, 1);
-                button.classList.remove('tag-active');
-                button.classList.add('tag-inactive');
-            } else {
-                // 선택
-                currentFields.push(field);
-                button.classList.remove('tag-inactive');
-                button.classList.add('tag-active');
-            }
-        }
-        
-        // 분야 모달 표시/숨기기
-        window.showFieldModal = function() {
-            if (!isFirebaseReady) {
-                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
-                 return;
-            }
-            // 모달 열 때 현재 선택된 상태를 반영하여 태그 클래스 업데이트
-            document.querySelectorAll('#fieldOptions button').forEach(button => {
-                const field = button.getAttribute('data-field');
-                const isActive = currentFields.includes(field);
-                if (isActive) {
-                    button.classList.add('tag-active');
-                    button.classList.remove('tag-inactive');
-                } else {
-                    button.classList.remove('tag-active');
-                    button.classList.add('tag-inactive');
-                }
-            });
-            document.getElementById('fieldModal').classList.remove('hidden');
-        }
-
-        window.applyFieldSelection = function() {
-            // "선택 완료" 버튼 클릭 시 모달 닫고 필터링 실행
-            document.getElementById('fieldModal').classList.add('hidden');
-            filterPrograms();
-            updateFilterDisplay();
-        }
-        
-        // 최초 로드 시 기본 필터 표시
-        updateFilterDisplay();
-
-    </script>
+        <!-- 정보 제공 섹션 (추가 기능) -->
+        <div class="pt-4 border-t">
+            <h3 class="text-2xl font-bold text-gray-800 mb-4">📢 잡스트레블링 추천 가이드</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="p-4 bg-indigo-50 rounded-lg shadow-md border border-indigo-200">
+                    <h4 class="font-bold text-indigo-700">학교 기반 맞춤 진로</h4>
+                    <p class="text-sm text-indigo-600">등록된 학교/학년 정보를 바탕으로 가까운 지역의 진로 활동을 추천합니다.</p>
+                </div>
+                <div class="p-4 bg-yellow-50 rounded-lg shadow-md border border-yellow-200">
+                    <h4 class="font-bold text-yellow-700">멘토링/탐방 기록</h4>
+                    <p class="text-sm text-yellow-600">진로 탐방 후기 및 멘토링 기록을 저장하고 공유할 수 있습니다.</p>
+                </div>
+                <div class="p-4 bg-green-50 rounded-lg shadow-md border border-green-200">
+                    <h4 class="font-bold text-green-700">공지 및 알림</h4>
+                    <p class="text-sm text-green-600">새로운 프로그램 등록, 신청 마감 알림 등을 확인할 수 있습니다.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
