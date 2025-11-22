@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>로그인</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit-component-lib.js"></script>
     <script type="module">
         // Firebase 모듈 임포트
         import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -31,8 +32,8 @@
             }
         };
 
-
-        document.addEventListener('DOMContentLoaded', async () => {
+        // *************** 핵심 수정: Firebase 초기화 로직을 Streamlit 준비 완료 후 실행 ***************
+        function initFirebase() {
             let firebaseConfig;
             try {
                 // app.py에서 전달된 JSON 문자열을 파싱합니다.
@@ -53,11 +54,10 @@
 
                 // 1. 초기 인증 시도 (Canvas 환경)
                 const initialAuthToken = window.initialAuthToken;
-                // 'None'은 Python None이 JSON.dumps를 통해 문자열화된 값입니다.
                 if (initialAuthToken && initialAuthToken !== 'None') {
-                    await signInWithCustomToken(auth, initialAuthToken);
+                    signInWithCustomToken(auth, initialAuthToken);
                 } else {
-                    await signInAnonymously(auth);
+                    signInAnonymously(auth);
                 }
 
                 // 2. 인증 상태 변화 감지 및 자동 로그인 처리
@@ -72,11 +72,23 @@
                 
             } catch (error) {
                 console.error("Firebase 초기화 오류:", error);
-                // HTML의 displayMessage 함수 대신, Streamlit UI에 오류를 전송
                 sendToStreamlit('AUTH_ERROR', { message: `Firebase 초기화 실패: ${error.message}` });
-                // 혹시 모르니 HTML 내부에 로컬 메시지 표시 (Streamlit 통신 실패 대비)
                 displayMessage(`Firebase 초기화 실패: ${error.message}`, 'error');
             }
+        }
+        
+        // Streamlit 컴포넌트 라이브러리 초기화 및 Firebase 로직 시작
+        // Streamlit.events.addEventListener는 컴포넌트가 완전히 로드되고 준비되었을 때만 트리거됩니다.
+        Streamlit.events.addEventListener(Streamlit.events.LOADED, function() {
+            // Streamlit 프레임 높이를 설정하고 Firebase 초기화를 시작합니다.
+            Streamlit.setFrameHeight(document.documentElement.scrollHeight);
+            initFirebase();
+        });
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM이 로드되면 Streamlit에게 높이를 알려주고 준비되었음을 알립니다.
+            Streamlit.setFrameHeight(document.documentElement.scrollHeight);
         });
 
         // 사용자 로그인 함수
