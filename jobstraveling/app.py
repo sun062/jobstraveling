@@ -13,10 +13,11 @@ INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
 # 🚨🚨🚨 Firebase 설정 JSON 문자열을 안정적으로 파싱 및 덤프합니다. 🚨🚨🚨
 try:
     FIREBASE_CONFIG_DICT = json.loads('{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}')
-    FIREBASE_CONFIG = json.dumps(FIREBASE_CONFIG_DICT)
+    # Python에서 준비된 JSON 객체를 문자열로 직렬화 (주입 준비)
+    FIREBASE_CONFIG_JSON = json.dumps(FIREBASE_CONFIG_DICT) 
 except json.JSONDecodeError:
     st.error("FATAL ERROR: Firebase Configuration string is invalid JSON.")
-    FIREBASE_CONFIG = "{}"
+    FIREBASE_CONFIG_JSON = "{}"
 
 
 # 페이지 이름 상수
@@ -42,7 +43,6 @@ def read_html_file(file_path):
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # 파일이 없을 경우 안정적인 HTML 오류 페이지 반환
         error_html = f"""
         <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px; font-family: sans-serif;">
             <h3 style="color: #c00;">[파일 로드 오류]</h3>
@@ -52,7 +52,6 @@ def read_html_file(file_path):
         st.error(f"오류: '{file_path}' 파일을 찾을 수 없습니다. HTML 오류 페이지 로드.")
         return error_html
     except Exception as e:
-        # 기타 파일 읽기 오류 시 안정적인 HTML 오류 페이지 반환
         error_html = f"""
         <div style="padding: 20px; background-color: #fdd; border: 1px solid #c00; border-radius: 8px; font-family: sans-serif;">
             <h3 style="color: #c00;">[파일 읽기 중 오류]</h3>
@@ -95,31 +94,29 @@ def handle_html_event(value):
     if value and 'event' in value:
         event_type = value['event']
         data = value.get('data', {})
-        st.session_state.auth_message = None # 이전 메시지 초기화
+        # Streamlit 앱에서 표시할 메시지는 navigate 또는 AUTH_ERROR에서 설정됨
         
-        # 페이지 이동 요청 처리
         if event_type == 'NAVIGATE_TO':
             target_page = data.get('page')
             if target_page in PAGE_FILES:
+                # 페이지 이동 시 기존 메시지 초기화
+                st.session_state.auth_message = None 
                 navigate(target_page)
             
         elif event_type == 'LOGIN_SUCCESS':
-            # 로그인 성공 처리
             uid = data.get('uid')
             message = f"로그인 성공! 사용자 ID: {uid}"
             navigate(PAGE_HOME, message=message, uid=uid, is_auth=True)
             
         elif event_type == 'LOGOUT_SUCCESS':
-            # 로그아웃 성공 처리
             message = "로그아웃 되었습니다."
             navigate(PAGE_LOGIN, message=message, uid=None, is_auth=False)
 
         elif event_type == 'AUTH_ERROR':
-            # 인증 오류 처리
+            # 오류 메시지만 세션 상태에 저장하여 다음 렌더링 시 표시
             st.session_state.auth_message = f"인증 오류: {data.get('message', '알 수 없는 오류')}"
         
         elif event_type == 'SIGNUP_SUCCESS':
-            # 회원가입 성공 처리
             message = f"회원가입 성공: {data.get('email', '')}. 로그인 페이지로 이동합니다."
             navigate(PAGE_LOGIN, message=message)
 
@@ -128,10 +125,9 @@ def handle_html_event(value):
 
 st.title("💼 잡스트레블링 (Job-Trekking) 앱")
 
-# 인증 메시지 표시
+# 인증 메시지 표시 및 리셋
 if st.session_state.auth_message:
-    # 이전에 설정된 메시지를 표시하고, 메시지 상태를 None으로 초기화 (다음 렌더링 시 중복 표시 방지)
-    if "오류" in st.session_state.auth_message or "실패" in st.session_state.auth_message:
+    if "오류" in st.session_state.auth_message or "실패" in st.session_state.auth_message or "인증 오류" in st.session_state.auth_message:
         st.error(st.session_state.auth_message)
     else:
         st.success(st.session_state.auth_message)
@@ -148,16 +144,18 @@ if page_file:
     
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
+        # FIREBASE_CONFIG_JSON은 이미 직렬화된 문자열이므로,
+        # JS에서 안전한 문자열 리터럴로 주입하기 위해 최종적으로 한 번 더 dumps 합니다.
         js_variables = f"""
         <script>
-            // JSON 문자열을 그대로 주입하여 파싱 오류 방지
-            window.firebaseConfig = JSON.parse('{FIREBASE_CONFIG}'); 
+            // JavaScript에서 JSON.parse를 사용하여 객체로 변환합니다.
+            window.firebaseConfig = JSON.parse({json.dumps(FIREBASE_CONFIG_JSON)}); 
+            // initialAuthToken은 문자열 또는 None이므로, 안전하게 주입합니다.
             window.initialAuthToken = {json.dumps(INITIAL_AUTH_TOKEN)};
-            window.appId = '{APP_ID}';
+            window.appId = {json.dumps(APP_ID)};
 
             // Streamlit으로 이벤트와 데이터를 다시 보내는 함수
             function sendToStreamlit(eventType, data = {{}}) {{
-                // console.log("Sending to Streamlit:", eventType, data);
                 Streamlit.setComponentValue({{
                     event: eventType,
                     data: data,
@@ -168,12 +166,12 @@ if page_file:
         """
         
         # Streamlit HTML 컴포넌트 렌더링
-        # key를 current_page로 설정하여 페이지 변경 시 컴포넌트 강제 리로드 유도
+        # key를 현재 페이지로 설정하여 페이지가 변경될 때 컴포넌트가 리셋되도록 합니다.
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
             scrolling=True, 
-            key=f"html_comp_{st.session_state.current_page}", # 고유 키로 설정
+            key=st.session_state.current_page, # 페이지 전환을 위한 고유 키
             return_value=True
         )
         
@@ -181,6 +179,5 @@ if page_file:
         if component_value:
             handle_html_event(component_value)
     
-    # st.markdown("---") # 디버그용
 else:
     st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
