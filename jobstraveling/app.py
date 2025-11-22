@@ -29,8 +29,9 @@ PAGE_HOME = 'home'
 # 페이지 파일 경로 딕셔너리
 PAGE_FILES = {
     PAGE_LOGIN: 'htmls/login.html',
-    PAGE_SIGNUP: 'htmls/signup.html', # 회원가입 파일 추가
+    PAGE_SIGNUP: 'htmls/signup.html', 
     PAGE_HOME: 'htmls/home.html',
+    # '비밀번호 찾기' 페이지는 현재 앱 흐름에서 제외되었습니다.
 }
 
 # --- 2. HTML 로드 및 렌더링 함수 ---
@@ -38,16 +39,20 @@ PAGE_FILES = {
 def read_html_file(file_path):
     """지정된 경로의 HTML 파일 내용을 읽거나 오류 발생 시 None을 반환합니다."""
     try:
+        # 현재 파일(app.py)의 디렉토리 경로를 기준으로 파일을 찾습니다.
         base_dir = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(base_dir, file_path)
         
         with open(full_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        st.error(f"[파일 로드 오류] '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해 주세요.")
+        # 파일을 찾지 못했을 경우 명확한 오류 메시지 출력
+        st.error(f"❌ 오류: '{file_path}' 파일을 찾을 수 없습니다.")
+        st.info(f"시도된 경로: {full_path}")
+        st.markdown("💡 'htmls' 디렉토리가 'app.py'와 같은 위치에 있는지 확인해주세요.")
         return None
     except Exception as e:
-        st.error(f"[파일 읽기 중 오류] 오류: {e}")
+        st.error(f"❌ 파일 읽기 중 오류: {e}")
         return None
 
 # --- 3. Streamlit 앱 상태 및 흐름 관리 ---
@@ -88,6 +93,9 @@ def handle_html_event(value):
             if target_page in PAGE_FILES:
                 st.session_state.auth_message = None 
                 navigate(target_page)
+            # 만약 PAGE_FILES에 없는 페이지로 이동하려 하면 오류 메시지 출력
+            elif target_page is not None:
+                st.error(f"⚠️ 페이지 전환 실패: 요청된 페이지 '{target_page}'는 PAGE_FILES에 정의되어 있지 않습니다.")
             
         elif event_type == 'LOGIN_SUCCESS':
             uid = data.get('uid')
@@ -158,9 +166,8 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
         </script>
         """
         
-        # Streamlit HTML 컴포넌트 렌더링 (return_value 인수를 제거하고 try-except로 안정성 강화)
         try:
-            # key와 return_value 인수를 모두 제거합니다.
+            # HTML 컴포넌트 렌더링
             component_value = st.components.v1.html(
                 js_variables + html_content,
                 height=800, 
@@ -172,14 +179,13 @@ if page_file and FIREBASE_CONFIG_JSON_STRING:
                 handle_html_event(component_value)
                 
         except TypeError as e:
-            # st.components.v1.html 내부에서 발생하는 Type Error를 잡습니다.
-            # DeltaGenerator 오류는 여기서 발생하지 않지만, 다른 예외를 처리합니다.
-            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다. 페이지를 새로고침하거나 개발자에게 문의하십시오.")
+            # Streamlit 컴포넌트 내부 오류 처리
+            st.error("🚨 컴포넌트 렌더링 오류 (TypeError): Streamlit과 HTML 컴포넌트 간 통신에 문제가 발생했습니다.")
             st.code(f"Error details: {e}", language='python')
         except Exception as e:
              st.error(f"🚨 알 수 없는 렌더링 오류: {e}")
     else:
-        # read_html_file에서 오류가 발생했을 경우 (이미 st.error가 호출됨)
+        # read_html_file에서 오류가 발생했을 경우
         pass 
     
 else:
