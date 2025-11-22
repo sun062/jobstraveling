@@ -11,9 +11,10 @@ APP_ID = os.getenv('__app_id', 'job_trekking_app')
 INITIAL_AUTH_TOKEN = os.getenv('__initial_auth_token', None)
 
 # 🚨🚨🚨 Firebase 설정 JSON 문자열을 안정적으로 파싱 및 덤프합니다. 🚨🚨🚨
+FIREBASE_CONFIG_JSON = None
 try:
+    # 환경 변수 대신 직접 JSON 문자열을 사용하고, 파싱 및 덤프 과정을 명확히 함
     FIREBASE_CONFIG_DICT = json.loads('{"apiKey": "AIzaSyBiigw574H93Q1Ph5EJTUoJEhcbIBQAiqq", "authDomain": "jobstraveling-6f1c9.firebaseapp.com", "projectId": "jobstraveling-6f1c9", "storageBucket": "jobstraveling-6f1c9.appspot.com", "messagingSenderId": "159042468260", "appId": "1:159042468260:web:95c0008838407e9d1832931", "measurementId": "G-EL8FK8Y3WV"}')
-    # Python에서 준비된 JSON 객체를 문자열로 직렬화 (주입 준비)
     FIREBASE_CONFIG_JSON = json.dumps(FIREBASE_CONFIG_DICT) 
 except json.JSONDecodeError:
     st.error("FATAL ERROR: Firebase Configuration string is invalid JSON.")
@@ -49,7 +50,6 @@ def read_html_file(file_path):
             <p><strong>오류:</strong> '{file_path}' 파일을 찾을 수 없습니다. 경로를 확인해 주세요.</p>
         </div>
         """
-        st.error(f"오류: '{file_path}' 파일을 찾을 수 없습니다. HTML 오류 페이지 로드.")
         return error_html
     except Exception as e:
         error_html = f"""
@@ -58,7 +58,6 @@ def read_html_file(file_path):
             <p><strong>오류:</strong> {e}</p>
         </div>
         """
-        st.error(f"파일 읽기 중 오류 발생: {e}. HTML 오류 페이지 로드.")
         return error_html
 
 # --- 3. Streamlit 앱 상태 및 흐름 관리 ---
@@ -76,7 +75,6 @@ if 'auth_message' not in st.session_state:
 
 def navigate(target_page, message=None, uid=None, is_auth=None):
     """상태를 업데이트하고 페이지를 변경합니다."""
-    # 상태를 세션에 반영
     st.session_state.current_page = target_page
     if message is not None:
         st.session_state.auth_message = message
@@ -85,7 +83,6 @@ def navigate(target_page, message=None, uid=None, is_auth=None):
     if is_auth is not None:
         st.session_state.is_authenticated = is_auth
         
-    # 상태가 변경되었으므로 Streamlit을 재실행하여 새 페이지 렌더링
     st.rerun()
 
 
@@ -94,12 +91,10 @@ def handle_html_event(value):
     if value and 'event' in value:
         event_type = value['event']
         data = value.get('data', {})
-        # Streamlit 앱에서 표시할 메시지는 navigate 또는 AUTH_ERROR에서 설정됨
         
         if event_type == 'NAVIGATE_TO':
             target_page = data.get('page')
             if target_page in PAGE_FILES:
-                # 페이지 이동 시 기존 메시지 초기화
                 st.session_state.auth_message = None 
                 navigate(target_page)
             
@@ -113,7 +108,6 @@ def handle_html_event(value):
             navigate(PAGE_LOGIN, message=message, uid=None, is_auth=False)
 
         elif event_type == 'AUTH_ERROR':
-            # 오류 메시지만 세션 상태에 저장하여 다음 렌더링 시 표시
             st.session_state.auth_message = f"인증 오류: {data.get('message', '알 수 없는 오류')}"
         
         elif event_type == 'SIGNUP_SUCCESS':
@@ -123,6 +117,7 @@ def handle_html_event(value):
 
 # --- 4. 메인 앱 실행 ---
 
+st.set_page_config(layout="wide")
 st.title("💼 잡스트레블링 (Job-Trekking) 앱")
 
 # 인증 메시지 표시 및 리셋
@@ -131,19 +126,20 @@ if st.session_state.auth_message:
         st.error(st.session_state.auth_message)
     else:
         st.success(st.session_state.auth_message)
-    st.session_state.auth_message = None # 메시지를 한 번만 표시하도록 리셋
+    st.session_state.auth_message = None 
         
 st.markdown(f"**현재 로드 중인 페이지:** `{st.session_state.current_page.upper()}`")
 
 # 현재 페이지의 HTML 파일 경로 가져오기
 page_file = PAGE_FILES.get(st.session_state.current_page)
 
-if page_file:
+if page_file and FIREBASE_CONFIG_JSON and FIREBASE_CONFIG_JSON != "{}":
     # 안정적인 HTML 콘텐츠 로드 시도
     html_content = read_html_file(page_file)
     
     if html_content:
         # HTML 컴포넌트에 주입할 JavaScript 변수 설정
+        # Python에서 직렬화된 JSON 문자열과 기타 변수를 JavaScript로 전달
         js_variables = f"""
         <script>
             // JavaScript에서 JSON.parse를 사용하여 객체로 변환합니다.
@@ -154,18 +150,22 @@ if page_file:
 
             // Streamlit으로 이벤트와 데이터를 다시 보내는 함수
             function sendToStreamlit(eventType, data = {{}}) {{
-                Streamlit.setComponentValue({{
-                    event: eventType,
-                    data: data,
-                    timestamp: Date.now() 
-                }});
+                // Streamlit이 로드되었는지 확인하고 데이터를 전송 (안정성 강화)
+                if (typeof Streamlit !== 'undefined' && Streamlit.setComponentValue) {{
+                    Streamlit.setComponentValue({{
+                        event: eventType,
+                        data: data,
+                        timestamp: Date.now() 
+                    }});
+                }} else {{
+                    console.error("Streamlit 객체가 준비되지 않았습니다. 이벤트를 보낼 수 없습니다.");
+                }}
             }}
         </script>
         """
         
         # Streamlit HTML 컴포넌트 렌더링
         # key를 현재 페이지로 설정하여 페이지가 변경될 때 컴포넌트가 리셋되도록 합니다.
-        # height를 정적으로 800px로 설정하여 컴포넌트 크기 계산 오류 방지
         component_value = st.components.v1.html(
             js_variables + html_content,
             height=800, 
@@ -179,4 +179,7 @@ if page_file:
             handle_html_event(component_value)
     
 else:
-    st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
+    if FIREBASE_CONFIG_JSON is None or FIREBASE_CONFIG_JSON == "{}":
+         st.error("🚨 환경 설정 오류: Firebase 설정이 유효하지 않습니다.")
+    else:
+        st.error(f"알 수 없는 페이지: {st.session_state.current_page}")
