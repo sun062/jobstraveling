@@ -464,20 +464,27 @@ def get_base_html_content():
 # --- 3. Streamlit 페이지 렌더링 함수 ---
 def render_home_page():
     
+    # **수정된 부분: 모든 초기화 로직을 함수 시작 부분에서 완료하여 안정성을 극대화합니다.**
     # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
         st.session_state['base_html'] = get_base_html_content()
         
-    # **수정된 부분: current_html의 존재 여부와 타입 체크를 강화합니다.**
     # 2. CURRENT HTML 초기화 (Base HTML이 있으면, Current HTML이 없거나 문자열이 아닐 때 초기화)
-    if 'current_html' not in st.session_state or not isinstance(st.session_state['current_html'], str):
+    # st.session_state.get('base_html')을 사용하여 base_html이 확실히 로드된 후 진행합니다.
+    if st.session_state.get('base_html') and ('current_html' not in st.session_state or not isinstance(st.session_state['current_html'], str)):
         # 최초에는 빈 스크립트를 삽입한 기본 HTML을 사용
-        st.session_state['current_html'] = st.session_state['base_html'].format(streamlit_data_script="")
+        # base_html이 문자열임을 보장하기 위해 get() 메서드 사용 및 포맷팅 처리
+        st.session_state['current_html'] = st.session_state.get('base_html', "<h1>Error: HTML template missing.</h1>").format(streamlit_data_script="")
     
     # 3. HTML 컴포넌트 렌더링
-    # st.session_state['current_html']은 이제 유효한 문자열임이 보장됩니다.
+    # 현재 HTML 콘텐츠가 문자열인지 최종적으로 확인하고, 그렇지 않다면 안전한 기본값을 제공합니다.
+    current_content = st.session_state.get('current_html')
+    if not isinstance(current_content, str):
+        # 최악의 경우를 대비한 안전 장치 (이 코드가 실행되면 이전 로직에 문제가 있다는 의미)
+        current_content = "<h1>Initialization Error. Please refresh.</h1>" 
+        
     component_value = components.html(
-        st.session_state['current_html'],
+        current_content,
         height=1200, 
         scrolling=True,
         key="home_filter_component"
