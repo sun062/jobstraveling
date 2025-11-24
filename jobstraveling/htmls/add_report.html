@@ -110,16 +110,16 @@
             const ratingInput = document.querySelector('input[name="rating"]:checked');
             
             const reportData = {
-                programName: document.getElementById('programName').value,
+                // trim()을 사용하여 좌우 공백을 제거하여 순수 콘텐츠만 전송
+                programName: document.getElementById('programName').value.trim(), 
                 experienceDate: document.getElementById('experienceDate').value,
-                jobField: document.getElementById('jobField').value,
+                jobField: document.getElementById('jobField').value.trim(),
                 // radio 버튼이 체크된 경우에만 값을 가져오고, 아니면 null로 처리
                 rating: ratingInput ? parseInt(ratingInput.value) : null, 
-                reportContent: document.getElementById('reportContent').value,
+                reportContent: document.getElementById('reportContent').value.trim(),
             };
 
             // 2. Streamlit Python 컴포넌트로 데이터 전송
-            // 'submitted' 플래그 없이 reportData만 전송
             Streamlit.setComponentValue({ 
                 reportData: reportData
             });
