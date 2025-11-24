@@ -529,9 +529,12 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
+    # **[수정 사항]** components.html 호출 전에 HTML 콘텐츠를 미리 로드하여 안정성을 높입니다.
+    login_html_content = get_login_html_content()
+
     # 정적 로그인 페이지 HTML 렌더링
     component_value = components.html(
-        get_login_html_content(),
+        login_html_content,
         height=700,
         scrolling=False,
         key="login_component"
