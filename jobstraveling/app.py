@@ -338,12 +338,25 @@ def render_add_report_page():
     
     # HTML 컴포넌트 렌더링 및 JavaScript 데이터 수신을 위한 키 설정
     # TypeError 방지를 위해 명시적인 인자 전달 및 안전한 컴포넌트 값 처리
-    component_value = components.html(
-        html=add_report_html, # 명시적으로 html 인자 전달 (타입 에러 방지 시도)
-        height=650,
-        scrolling=True,
-        key="report_form_html_component"
-    )
+    # component_value = components.html(...)
+    # 이 부분이 오류를 발생시키는 지점이므로, try-except로 감싸거나,
+    # None 반환 시의 안전한 처리를 강화합니다.
+    
+    # components.html의 결과를 변수에 할당합니다.
+    component_value = None
+    try:
+        # html 인자를 명시적으로 전달합니다.
+        component_value = components.html(
+            html=add_report_html, 
+            height=650,
+            scrolling=True,
+            key="report_form_html_component"
+        )
+    except Exception as e:
+        # 컴포넌트 렌더링 초기 오류가 발생하더라도 앱 전체가 멈추지 않도록 처리합니다.
+        st.warning(f"폼 로드 중 초기 오류 발생: {e}")
+        # 이 경우 component_value는 None으로 유지됩니다.
+
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
     # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
