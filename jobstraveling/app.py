@@ -100,12 +100,11 @@ def read_html_file(file_name):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            # 파일이 성공적으로 로드되었는지 확인하는 로그 추가
             if not content:
                 st.warning(f"파일이 성공적으로 로드되었으나 내용이 비어 있습니다: 'htmls/{file_name}'")
-            return str(content) # 항상 문자열로 반환하도록 강제
+            return content # str 타입 그대로 반환
     except FileNotFoundError:
-        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요. 해당 페이지는 표시되지 않습니다.")
+        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
         return "" # 파일을 찾지 못하면 빈 문자열 반환
     except Exception as e:
         st.error(f"파일 읽기 중 예기치 않은 오류 발생: {e}")
@@ -320,19 +319,25 @@ def render_add_report_page():
     add_report_html = read_html_file('add_report.html')
     
     component_value = None
+    
+    # **최강 방어 로직**: HTML 콘텐츠를 str()로 강제 변환하고, 그 내용이 비어있지 않은 경우에만 호출
+    html_content_safe = str(add_report_html) if add_report_html is not None else ""
 
-    # HTML 파일이 유효한 내용(비어있지 않은 문자열)을 가지고 있을 경우에만 components.html 호출
-    # **핵심 방어 로직**: 명확히 str 타입이며 내용이 비어있지 않은 경우에만 호출
-    if isinstance(add_report_html, str) and add_report_html.strip(): 
-        component_value = components.html(
-            html=add_report_html, 
-            height=700, 
-            scrolling=True,
-            key="report_form_component"
-        )
+    if html_content_safe.strip():
+        try:
+            component_value = components.html(
+                html=html_content_safe,  # 안전하게 변환된 문자열 전달
+                height=700, 
+                scrolling=True,
+                key="report_form_component"
+            )
+        except Exception as e:
+            # Streamlit 내부 오류 발생 시에도 앱이 다운되지 않도록 처리
+            st.error(f"⚠️ 컴포넌트 렌더링 중 Streamlit 내부 오류 발생: {e}. HTML 파일 내용을 다시 확인해 주세요.")
+            st.info(f"시도된 HTML 길이: {len(html_content_safe)}")
     else:
-        # 파일 로드 실패 시, 사용자에게 명확히 알림 (디버깅 정보 추가)
-        st.error(f"⚠️ 심각: 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다. (길이: {len(add_report_html) if add_report_html else 0}) 파일을 확인해주세요.")
+        # 파일 로드 실패 시, 사용자에게 명확히 알림 
+        st.error(f"⚠️ 심각: 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다. (길이: {len(html_content_safe)})")
         st.info("HTML 폼이 표시되지 않아 리포트 저장 기능을 사용할 수 없습니다. 파일 경로가 올바른지 확인해 주세요.")
 
 
