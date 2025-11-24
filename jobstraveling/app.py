@@ -3,24 +3,7 @@ import streamlit.components.v1 as components
 import json
 import base64
 
-# --- 0. 이스케이프 유틸리티 함수 (Base HTML 전용) ---
-def escape_curly_braces(html_content):
-    """
-    Base HTML에만 적용되며, {streamlit_data_script}를 제외한 모든 중괄호를 이스케이프 처리합니다.
-    """
-    # 1. 포맷팅 키를 임시 Placeholder로 대체
-    placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
-    content = html_content.replace("{streamlit_data_script}", placeholder)
-    
-    # 2. 모든 일반 중괄호 이스케이프 처리
-    # 이중 중괄호로 강제 변환하여 Streamlit의 포맷팅 엔진을 통과할 수 있게 합니다.
-    content = content.replace("{", "{{").replace("}", "}}")
-    
-    # 3. Placeholder를 포맷팅 키로 다시 복원
-    return content.replace(placeholder, "{streamlit_data_script}")
-
-
-# --- 1. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
+# --- 0. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
 MOCK_PROGRAMS = [
     {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
     {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description": "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
@@ -34,7 +17,7 @@ MOCK_PROGRAMS = [
 REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
 FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
-# --- 2. HTML 콘텐츠 (로그인 템플릿) 로드 ---
+# --- 1. 로그인 페이지 HTML 콘텐츠 (Base64 인코딩 대상) ---
 def get_login_html_base64():
     """
     로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
@@ -100,19 +83,17 @@ def get_login_html_base64():
     encoded_html = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
     return encoded_html
 
+# --- 2. Base64 디코더 HTML 콘텐츠 (로그인 페이지 로드 스크립트) ---
 def get_base64_decoder_html():
     """
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
-    최소한의 HTML 스크립트를 반환합니다.
-    
-    Streamlit의 내부 포맷팅 충돌을 완전히 회피하기 위해 모든 JS 중괄호를 이스케이프하고
-    문자열 연결을 사용합니다.
+    최소한의 HTML 스크립트를 반환합니다. (Streamlit 포맷팅 오류 방지 로직 적용)
     """
     encoded_content = get_login_html_base64()
     
-    # 모든 JS 중괄호를 이스케이프 ({{, }}) 처리하여 Streamlit의 .format() 충돌 방지
-    # Base64 콘텐츠는 Python 문자열 연결로 안전하게 삽입
-    html_content = """
+    # Base64 데이터를 삽입할 포맷팅 키 {encoded_base64_data}만 남기고,
+    # 모든 JS 중괄호를 이스케이프 처리하기 위한 템플릿
+    decoder_template = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -122,49 +103,61 @@ def get_base64_decoder_html():
 <body>
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
-        // Base64로 인코딩된 HTML 콘텐츠 삽입 지점
-        const encoded = '""" + encoded_content + """'; 
+        // 이 포맷팅 키에 Base64 데이터가 삽입됩니다.
+        const encoded = '{encoded_base64_data}'; 
         
-        // Base64 디코딩 함수 
-        function decodeBase64(base64) {{
-            // 브라우저 API를 사용하여 디코딩
+        // Base64 디코딩 함수 (JS 중괄호가 포함되어 있음)
+        function decodeBase64(base64) {
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {{
+            for (let i = 0; i < len; i++) {
                 bytes[i] = binary_string.charCodeAt(i);
-            }}
+            }
             return new TextDecoder().decode(bytes);
-        }}
+        }
 
-        // 디코딩 및 삽입
-        try {{
+        // 디코딩 및 삽입 로직
+        try {
             const decodedHtml = decodeBase64(encoded);
-            // document.body 대신 document 전체의 내용을 덮어씁니다.
             document.open();
             document.write(decodedHtml);
             document.close();
-        }} catch(e) {{
-            // 오류 발생 시 사용자에게 메시지 표시
+        } catch(e) {
             const msgEl = document.getElementById('loading-message');
-            if (msgEl) {{
+            if (msgEl) {
                 msgEl.style.color = 'red';
                 msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
-            }}
+            }
             console.error("Base64 decoding failed:", e);
-        }}
+        }
     </script>
 </body>
 </html>
 """
-    return html_content
+    
+    # --- 근본적인 해결책: 프로그램 이스케이프 로직 ---
+    placeholder = "__ENCODED_DATA_PLACEHOLDER__"
+    
+    # 1. 포맷팅 키를 임시 Placeholder로 대체
+    escaped_template = decoder_template.replace("{encoded_base64_data}", placeholder)
+    
+    # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
+    # 이중 중괄호로 강제 변환하여 Streamlit의 포맷팅 엔진을 통과할 수 있게 합니다.
+    escaped_template = escaped_template.replace("{", "{{").replace("}", "}}")
+    
+    # 3. Placeholder를 포맷팅 키로 다시 복원
+    final_template = escaped_template.replace(placeholder, "{encoded_base64_data}")
 
+    # 4. 최종적으로 Base64 데이터 삽입 후 반환
+    return final_template.format(encoded_base64_data=encoded_content)
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
-    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함합니다."""
-    # Base HTML은 동적 스크립트 삽입이 필요하므로 일반 문자열과 자동 이스케이프 함수를 유지합니다.
-    html = """
+    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함하며, JS 중괄호는 이스케이프됩니다."""
+    
+    # Home Page HTML 템플릿 (Raw String)
+    html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -588,8 +581,20 @@ def get_base_html_content():
 </body>
 </html>
 """
-    # Base HTML은 동적 스크립트 삽입이 필요하므로 자동 이스케이프 함수를 그대로 유지합니다.
-    return escape_curly_braces(html)
+    
+    # --- 근본적인 해결책: 프로그램 이스케이프 로직 적용 ---
+    
+    # 템플릿의 포맷팅 키를 임시 Placeholder로 대체
+    placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
+    content = html.replace("{streamlit_data_script}", placeholder)
+    
+    # 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
+    content = content.replace("{", "{{").replace("}", "}}")
+    
+    # Placeholder를 포맷팅 키로 다시 복원
+    # Streamlit이 이 위치에만 데이터를 삽입할 수 있도록 합니다.
+    return content.replace(placeholder, "{streamlit_data_script}")
+
 
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
 def render_login_page():
@@ -622,12 +627,12 @@ def render_home_page():
         
     base_html_template = st.session_state['base_html'] 
     
-    # 2. current_html 초기화 및 유효성 검사 (안전 장치 강화)
+    # 2. current_html 초기화 및 유효성 검사
     current_content = st.session_state.get('current_html')
     
     # current_content가 없거나 문자열이 아니라면, 기본 템플릿으로 초기화합니다.
     if not isinstance(current_content, str) or not current_content:
-        # 빈 스크립트를 삽입한 기본 HTML로 초기화
+        # 빈 스크립트를 삽입한 기본 HTML로 초기화 (이스케이프된 템플릿 사용)
         initial_html = base_html_template.format(streamlit_data_script="")
         st.session_state['current_html'] = initial_html
         current_content = initial_html # 렌더링에 사용할 변수 업데이트
@@ -667,7 +672,7 @@ def render_home_page():
                 """
                 
                 # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
-                # 이스케이프된 중괄호가 포함된 base_html_template을 사용합니다.
+                # 이스케이프된 base_html_template을 안전하게 사용합니다.
                 new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
                 
                 # 7. 세션 상태 업데이트 및 재실행 요청
