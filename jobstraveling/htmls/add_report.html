@@ -103,23 +103,29 @@
     <script>
         /**
          * 폼 데이터를 수집하고 Streamlit Python으로 전송하는 함수
-         * - 이제 제출 플래그 없이 오직 데이터만 전송합니다.
+         * - 데이터 전송 시점의 안정성을 높입니다.
          */
         function sendDataToStreamlit() {
             // 1. 데이터 수집
             const ratingInput = document.querySelector('input[name="rating"]:checked');
             
+            const programName = document.getElementById('programName').value.trim();
+            const experienceDate = document.getElementById('experienceDate').value;
+            const jobField = document.getElementById('jobField').value.trim();
+            const rating = ratingInput ? parseInt(ratingInput.value) : null;
+            const reportContent = document.getElementById('reportContent').value.trim();
+            
             const reportData = {
-                // trim()을 사용하여 좌우 공백을 제거하여 순수 콘텐츠만 전송
-                programName: document.getElementById('programName').value.trim(), 
-                experienceDate: document.getElementById('experienceDate').value,
-                jobField: document.getElementById('jobField').value.trim(),
-                // radio 버튼이 체크된 경우에만 값을 가져오고, 아니면 null로 처리
-                rating: ratingInput ? parseInt(ratingInput.value) : null, 
-                reportContent: document.getElementById('reportContent').value.trim(),
+                programName: programName,
+                experienceDate: experienceDate,
+                jobField: jobField,
+                rating: rating,
+                reportContent: reportContent,
             };
 
             // 2. Streamlit Python 컴포넌트로 데이터 전송
+            // 모든 필수 항목이 채워지지 않았더라도, 현재의 모든 데이터를 전송하여
+            // Python 측에서 항상 최신(채워진) 데이터를 받을 수 있도록 합니다.
             Streamlit.setComponentValue({ 
                 reportData: reportData
             });
