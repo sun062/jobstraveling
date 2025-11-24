@@ -102,31 +102,23 @@ def save_report_to_firestore(report_data):
     return True, ""
 
 
-# --- 2. HTML 파일 로드 함수 ---
+# --- 2. HTML 파일 로드 함수 (수정된 부분) ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
-    # Streamlit Cloud 환경에서는 현재 디렉토리에 파일이 있어야 접근 가능합니다.
-    # 하지만 Canvas 환경에서는 파일 시스템 구조가 평탄화되므로, 상대 경로를 사용합니다.
-    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'htmls', file_name)
+    # ⭐️ 경로 문제 해결을 위해 현재 스크립트의 절대 경로를 기준으로 파일을 찾습니다.
+    # __file__은 현재 실행 중인 파일(app.py)의 경로를 나타냅니다.
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, 'htmls', file_name)
+    
     try:
-        # 파일 경로가 복잡해지는 것을 막기 위해 임시로 현재 디렉토리로 변경
-        file_path = file_name
-        
-        # 파일이 생성되었는지 확인 후, 실제 파일 시스템 경로를 사용합니다.
-        # 이 환경에서는 파일이 htmls/add_report.html 처럼 저장될 수 있습니다.
-        # 하지만 Streamlit에서는 파일 시스템을 다루기 어렵기 때문에,
-        # 사용자가 제공한 파일 경로를 그대로 사용하는 것이 안전합니다.
-        
-        # NOTE: 이 코드는 파일 시스템의 'htmls/' 폴더에 접근하는 코드로 가정합니다.
-        # 실제 Streamlit/Canvas 환경에서는 파일 경로가 다를 수 있으나,
-        # 이전에 제공된 코드를 유지합니다.
-        file_path = f"htmls/{file_name}"
-        
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # st.error(f"HTML 파일을 찾을 수 없습니다: {file_name}") # 에러 메시지 제거
-        # 파일을 찾을 수 없는 경우 빈 문자열을 반환하여 앱 충돌 방지
+        # 파일이 없을 경우, 오류 메시지를 표시하여 사용자가 경로 문제를 인지할 수 있도록 돕습니다.
+        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
+        return ""
+    except Exception as e:
+        st.error(f"파일 읽기 중 예기치 않은 오류 발생: {e}")
         return ""
 
 # --- 3. 페이지 전환 ---
