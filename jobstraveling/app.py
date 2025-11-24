@@ -336,31 +336,19 @@ def render_add_report_page():
     # 1. HTML 컴포넌트 렌더링 (폼 입력 담당)
     add_report_html = read_html_file('add_report.html')
     
-    # HTML 컴포넌트 렌더링 및 JavaScript 데이터 수신을 위한 키 설정
-    # TypeError 방지를 위해 명시적인 인자 전달 및 안전한 컴포넌트 값 처리
-    # component_value = components.html(...)
-    # 이 부분이 오류를 발생시키는 지점이므로, try-except로 감싸거나,
-    # None 반환 시의 안전한 처리를 강화합니다.
-    
-    # components.html의 결과를 변수에 할당합니다.
-    component_value = None
-    try:
-        # html 인자를 명시적으로 전달합니다.
-        component_value = components.html(
-            html=add_report_html, 
-            height=650,
-            scrolling=True,
-            key="report_form_html_component"
-        )
-    except Exception as e:
-        # 컴포넌트 렌더링 초기 오류가 발생하더라도 앱 전체가 멈추지 않도록 처리합니다.
-        st.warning(f"폼 로드 중 초기 오류 발생: {e}")
-        # 이 경우 component_value는 None으로 유지됩니다.
+    # components.html에는 key 인수를 전달할 수 없습니다. key 인수를 제거합니다.
+    component_value = components.html(
+        html=add_report_html, 
+        height=650,
+        scrolling=True,
+        # key="report_form_html_component" # 오류 발생 원인인 key 인수를 제거
+    )
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
     # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
     # component_value가 딕셔너리 형태이고 필요한 키를 포함하는지 확인합니다.
+    # component_value가 None인 경우 (초기 로딩 시) 안전하게 건너뜁니다.
     if isinstance(component_value, dict) and 'reportData' in component_value:
         # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
         st.session_state.current_report_data = component_value['reportData']
