@@ -55,8 +55,9 @@ if 'mock_user_normal' not in st.session_state:
     }
 
 # 리포트 폼 데이터를 저장할 세션 상태 (HTML 컴포넌트에서 전달받음)
+# ⭐️ None 대신 빈 딕셔너리로 초기화하여 안정성 강화 ⭐️
 if 'current_report_data' not in st.session_state:
-    st.session_state.current_report_data = None
+    st.session_state.current_report_data = {}
 if 'report_saved_successfully' not in st.session_state:
     st.session_state.report_saved_successfully = False
 
@@ -76,8 +77,12 @@ def save_report_to_firestore(report_data):
         return False, "사용자 인증 정보를 찾을 수 없습니다."
 
     # 필수 필드 유효성 검사 
-    if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
-        # HTML에서 데이터를 받았지만 필수 필드가 부족한 경우
+    # HTML에서 trim()을 했기 때문에 Python에서는 빈 문자열만 확인하면 됩니다.
+    if not report_data or \
+       not report_data.get('programName') or \
+       not report_data.get('experienceDate') or \
+       report_data.get('rating') is None or \
+       not report_data.get('reportContent'):
         return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
     # Firestore Data Structure Stub
@@ -338,31 +343,33 @@ def render_add_report_page():
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
-    # IMPORTANT: component_value는 버튼 클릭 시점이 아닌, 렌더링 시점에 업데이트된 최신 값일 수 있습니다.
     current_data = None
+    # ⭐️ Streamlit 컴포넌트가 값을 반환했고, 그 값이 딕셔너리 형태라면 데이터를 업데이트합니다. ⭐️
     if isinstance(component_value, dict) and 'reportData' in component_value:
         current_data = component_value['reportData']
-        # 데이터를 세션 상태에 저장하여 Streamlit 버튼 클릭 시 사용
-        # if current_data is not None: # None 체크는 불필요하지만, 명확하게 업데이트
-        st.session_state.current_report_data = current_data 
+        # 데이터를 세션 상태에 저장합니다.
+        if current_data is not None:
+             st.session_state.current_report_data = current_data
+        else:
+             # HTML에서 null을 보냈더라도, 빈 딕셔너리로 초기화하여 None 상태를 방지
+             st.session_state.current_report_data = {}
+
     
-    # 디버깅 정보: 현재 세션에 저장된 폼 데이터 확인 (선택 사항)
     # st.sidebar.json(st.session_state.get('current_report_data'))
 
 
     st.markdown("---")
 
     # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
-    # 버튼 클릭 시, Streamlit은 전체 페이지를 다시 실행합니다.
     if st.button("🚀 리포트 저장하기", key="submit_report_button"):
         
         # 버튼 클릭 후, 페이지가 재실행되면서 바로 위에서 업데이트된
         # st.session_state.current_report_data를 사용합니다.
-        data_to_save = st.session_state.get('current_report_data')
+        data_to_save = st.session_state.get('current_report_data', {}) # 초기값을 빈 딕셔너리로 설정하여 None 에러 방지
 
-        # ⭐️ 프로그램명 또는 소감 내용이 비어있으면 저장 오류 메시지 표시 ⭐️
+        # ⭐️ 강화된 유효성 검사 ⭐️
         is_valid = (
-            data_to_save is not None and 
+            # data_to_save가 딕셔너리여야 하며 (data_to_save is not None은 이제 필요 없음, 초기값이 {}이므로)
             data_to_save.get('programName', '').strip() != '' and 
             data_to_save.get('experienceDate') and 
             data_to_save.get('rating') is not None and 
@@ -376,24 +383,23 @@ def render_add_report_page():
             if success:
                 st.session_state.report_saved_successfully = True
                 # 저장 후 현재 폼 데이터를 초기화
-                st.session_state.current_report_data = None 
-                # st.success("🎉 리포트가 성공적으로 저장되었습니다.") # 아래에서 처리
-                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행 (페이지 상태 클리어 효과도 겸함)
+                st.session_state.current_report_data = {} # 빈 딕셔너리로 초기화
+                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행
             else:
                 st.error(f"⚠️ 리포트 저장 실패: {message}")
         else:
             # 필수 항목 누락 시 사용자에게 경고 메시지 표시
             st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
             
-            # 어떤 필드가 누락되었는지 구체적으로 표시 (디버깅/UX 개선)
+            # 어떤 필드가 누락되었는지 구체적으로 표시
             missing_fields = []
-            if not data_to_save or data_to_save.get('programName', '').strip() == '':
+            if data_to_save.get('programName', '').strip() == '':
                 missing_fields.append("체험 프로그램명")
-            if not data_to_save or not data_to_save.get('experienceDate'):
+            if not data_to_save.get('experienceDate'):
                 missing_fields.append("체험 일자")
-            if not data_to_save or data_to_save.get('rating') is None:
+            if data_to_save.get('rating') is None:
                 missing_fields.append("별점")
-            if not data_to_save or data_to_save.get('reportContent', '').strip() == '':
+            if data_to_save.get('reportContent', '').strip() == '':
                 missing_fields.append("소감 및 기록 내용")
 
             if missing_fields:
