@@ -77,6 +77,7 @@ def save_report_to_firestore(report_data):
 
     # 필수 필드 유효성 검사 
     if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
+        # HTML에서 데이터를 받았지만 필수 필드가 부족한 경우
         return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
     # Firestore Data Structure Stub
@@ -319,54 +320,53 @@ def render_add_report_page():
     
     component_value = None
     
-    # **최강 방어 로직**: HTML 콘텐츠를 str()로 강제 변환하고, 그 내용이 비어있지 않은 경우에만 호출
     html_content_safe = str(add_report_html) if add_report_html is not None else ""
 
     if html_content_safe.strip():
         try:
-            # **수정**: 'key' 인수를 제거하여 Streamlit 내부 오류를 회피
             component_value = components.html(
                 html=html_content_safe,  # 안전하게 변환된 문자열 전달
                 height=700, 
                 scrolling=True,
-                # key="report_form_component"  <-- 이 인수를 제거했습니다.
             )
         except Exception as e:
-            # Streamlit 내부 오류 발생 시에도 앱이 다운되지 않도록 처리
             st.error(f"⚠️ 컴포넌트 렌더링 중 Streamlit 내부 오류 발생: {e}. HTML 파일 내용을 다시 확인해 주세요.")
             st.info(f"시도된 HTML 길이: {len(html_content_safe)}")
     else:
-        # 파일 로드 실패 시, 사용자에게 명확히 알림 
-        st.error(f"⚠️ 심각: 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다. (길이: {len(html_content_safe)})")
+        st.error(f"⚠️ 심각: 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다.")
         st.info("HTML 폼이 표시되지 않아 리포트 저장 기능을 사용할 수 없습니다. 파일 경로가 올바른지 확인해 주세요.")
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
+    # IMPORTANT: component_value는 버튼 클릭 시점이 아닌, 렌더링 시점에 업데이트된 최신 값일 수 있습니다.
     current_data = None
     if isinstance(component_value, dict) and 'reportData' in component_value:
         current_data = component_value['reportData']
         # 데이터를 세션 상태에 저장하여 Streamlit 버튼 클릭 시 사용
+        # if current_data is not None: # None 체크는 불필요하지만, 명확하게 업데이트
         st.session_state.current_report_data = current_data 
     
-    # 디버깅 정보: 현재 세션에 저장된 폼 데이터 확인
+    # 디버깅 정보: 현재 세션에 저장된 폼 데이터 확인 (선택 사항)
     # st.sidebar.json(st.session_state.get('current_report_data'))
 
 
     st.markdown("---")
 
     # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
+    # 버튼 클릭 시, Streamlit은 전체 페이지를 다시 실행합니다.
     if st.button("🚀 리포트 저장하기", key="submit_report_button"):
         
-        # 버튼 클릭 시, HTML 컴포넌트가 마지막으로 전달한 데이터를 사용
+        # 버튼 클릭 후, 페이지가 재실행되면서 바로 위에서 업데이트된
+        # st.session_state.current_report_data를 사용합니다.
         data_to_save = st.session_state.get('current_report_data')
 
-        # 필수 필드 유효성 검사
+        # ⭐️ 프로그램명 또는 소감 내용이 비어있으면 저장 오류 메시지 표시 ⭐️
         is_valid = (
-            data_to_save and 
-            data_to_save.get('programName') and 
+            data_to_save is not None and 
+            data_to_save.get('programName', '').strip() != '' and 
             data_to_save.get('experienceDate') and 
             data_to_save.get('rating') is not None and 
-            data_to_save.get('reportContent')
+            data_to_save.get('reportContent', '').strip() != ''
         )
 
         if is_valid:
@@ -377,11 +377,27 @@ def render_add_report_page():
                 st.session_state.report_saved_successfully = True
                 # 저장 후 현재 폼 데이터를 초기화
                 st.session_state.current_report_data = None 
-                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행
+                # st.success("🎉 리포트가 성공적으로 저장되었습니다.") # 아래에서 처리
+                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행 (페이지 상태 클리어 효과도 겸함)
             else:
                 st.error(f"⚠️ 리포트 저장 실패: {message}")
         else:
+            # 필수 항목 누락 시 사용자에게 경고 메시지 표시
             st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
+            
+            # 어떤 필드가 누락되었는지 구체적으로 표시 (디버깅/UX 개선)
+            missing_fields = []
+            if not data_to_save or data_to_save.get('programName', '').strip() == '':
+                missing_fields.append("체험 프로그램명")
+            if not data_to_save or not data_to_save.get('experienceDate'):
+                missing_fields.append("체험 일자")
+            if not data_to_save or data_to_save.get('rating') is None:
+                missing_fields.append("별점")
+            if not data_to_save or data_to_save.get('reportContent', '').strip() == '':
+                missing_fields.append("소감 및 기록 내용")
+
+            if missing_fields:
+                 st.warning(f"❌ **누락된 필수 항목:** {', '.join(missing_fields)}를 모두 입력해야 저장할 수 있습니다.")
 
 
     # 4. 저장 성공 후 상태 (성공 메시지 및 네비게이션 버튼)
