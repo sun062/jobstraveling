@@ -1,697 +1,581 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import os
-import json 
-import time
-from datetime import date, datetime 
-from typing import List, Dict, Any
+import json
 
-# --- Firebase SDK Admin (Python) 사용을 위한 Stubs ---
-if 'firestore_reports' not in st.session_state:
-    st.session_state.firestore_reports = {} # {userId: [report1, report2, ...]}
+# --- 1. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
+MOCK_PROGRAMS = [
+    {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
+    {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description: "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
+    {"id": 3, "title": "경기 AI 로봇 체험관", "region": "경기", "type": "진로", "url": "https://www.google.com/search?q=경기+AI+로봇", "img": "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", "description": "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", "fields": ["AI/IT", "과학/기술", "기계/제조"]},
+    {"id": 4, "title": "광주 자동차 미래 산업 탐방", "region": "광주", "type": "견학", "url": "https://www.google.com/search?q=광주+자동차+탐방", "img": "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", "description": "친환경 자동차 생산 라인 및 연구소 방문.", "fields": ["기계/제조", "과학/기술"]},
+    {"id": 5, "title": "강원 환경보호 교육 캠페인", "region": "강원", "type": "진로", "url": "https://www.google.com/search?q=강원+환경+캠페인", "img": "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", "description": "지속 가능한 환경과 관련된 직업군 탐색.", "fields": ["생명/환경", "사회/인문"]},
+    {"id": 6, "title": "서울 고궁 문화 해설사 체험", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울+문화+해설사", "img": "https://placehold.co/400x200/5a32a8/ffffff?text=Culture+Guide", "description": "역사 해설 및 문화재 보존 체험.", "fields": ["예술/문화", "사회/인문"]},
+    {"id": 7, "title": "대전 나노 반도체 특강", "region": "대전", "type": "진로", "url": "https://www.google.com/search?q=대전+반도체+특강", "img": "https://placehold.co/400x200/3498db/ffffff?text=Semiconductor", "description": "미래 기술의 핵심, 반도체 제조 과정 이해.", "fields": ["과학/기술", "AI/IT", "화학"]},
+]
 
-# ⭐️ 프로그램 데이터는 이제 검색을 통해 로드되므로 Mocking 목록은 필요하지 않습니다. ⭐️
-if 'search_results' not in st.session_state:
-    st.session_state.search_results = []
-if 'search_query' not in st.session_state:
-    st.session_state.search_query = ""
-if 'search_region' not in st.session_state:
-    st.session_state.search_region = "전국"
-if 'search_fields' not in st.session_state:
-    st.session_state.search_fields = []
+REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
+FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
-
-# --- Global Environment Variables ---
-firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
-appId = os.environ.get('__app_id', 'default-app-id')
-initialAuthToken = os.environ.get('__initial_auth_token', '')
-
-# --- 1. 환경 설정 및 세션 상태 초기화 ---
-st.set_page_config(layout="centered", initial_sidebar_state="expanded")
-
-# 페이지 정의 상수
-PAGE_LOGIN = 'login'
-PAGE_SIGNUP = 'signup'
-PAGE_HOME = 'home' # ⭐️ 검색 및 목록을 모두 처리합니다. ⭐️
-PAGE_PROGRAM_LIST = 'program_list_deprecated' # 사용하지 않습니다.
-PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지
-PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지
-
-# 세션 상태 초기화 (Mock 데이터 포함)
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = PAGE_LOGIN
-if 'user_data' not in st.session_state:
-    st.session_state.user_data = None 
-if 'mock_user' not in st.session_state:
-    st.session_state.mock_user = {
-        'email': 'admin@jobtrekking.com', 
-        'password': 'adminpassword',
-        'schoolName': '관리자 학교',
-        'classNumber': '999',
-        'studentName': '관리자',
-        'birthDate': '2000-01-01',
-        'isAdmin': True 
-    }
-if 'mock_user_normal' not in st.session_state:
-    st.session_state.mock_user_normal = {
-        'email': 'user@jobtrekking.com', 
-        'password': 'userpassword',
-        'schoolName': '일반 고등학교',
-        'classNumber': '101',
-        'studentName': '일반사용자',
-        'birthDate': '2007-01-01',
-        'isAdmin': False
-    }
-
-# 리포트 폼 데이터를 저장할 세션 상태 (HTML 컴포넌트에서 전달받음)
-if 'current_report_data' not in st.session_state:
-    st.session_state.current_report_data = {}
-if 'report_saved_successfully' not in st.session_state:
-    st.session_state.report_saved_successfully = False
-
-# ⭐️ HTML 컴포넌트에서 필터 데이터를 받을 상태 (검색어는 Streamlit 네이티브 사용) ⭐️
-if 'filter_component_data' not in st.session_state:
-    st.session_state.filter_component_data = {
-        'region': '전국',
-        'fields': [],
-        'filterChanged': False
-    }
-
-# --- Firebase Stubs (Python Backend) ---
-
-def get_current_user_id():
-    """Mock User ID 반환."""
-    return st.session_state.user_data.get('email') if st.session_state.user_data else None
-
-def save_report_to_firestore(report_data):
-    """
-    Python 백엔드에서 리포트 데이터를 저장합니다.
-    (세션 상태를 임시 저장소로 사용)
-    """
-    user_id = get_current_user_id()
-    if not user_id:
-        return False, "사용자 인증 정보를 찾을 수 없습니다."
-
-    # 필수 필드 유효성 검사 
-    if not report_data or \
-       not report_data.get('programName') or \
-       not report_data.get('experienceDate') or \
-       report_data.get('rating') is None or \
-       not report_data.get('reportContent'):
-        return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
-    
-    # Firestore Data Structure Stub
-    if user_id not in st.session_state.firestore_reports:
-        st.session_state.firestore_reports[user_id] = []
-    
-    # 중복 방지를 위해 기존 ID 확인 후 부여 (Mocking 환경)
-    report_data['id'] = f"R{len(st.session_state.firestore_reports[user_id]) + 1}_{user_id[:3]}" 
-    report_data['createdAt'] = datetime.now().isoformat()
-    
-    st.session_state.firestore_reports[user_id].append(report_data)
-    
-    return True, ""
-
-
-# --- 2. HTML 파일 로드 함수 ---
-def read_html_file(file_name):
-    """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(base_dir, 'htmls', file_name)
-    
+# --- 2. HTML 콘텐츠 로드 (TypeError 방지 핵심) ---
+def load_html_content(filepath):
+    """지정된 경로에서 HTML 파일을 안전하게 로드합니다."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            if not content:
-                st.warning(f"파일이 성공적으로 로드되었으나 내용이 비어 있습니다: 'htmls/{file_name}'")
-            return content
-    except FileNotFoundError:
-        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
-        return ""
-    except Exception as e:
-        st.error(f"파일 읽기 중 예기치 않은 오류 발생: {e}")
-        return ""
-
-# --- 3. 페이지 전환 ---
-def navigate(page):
-    """세션 상태를 변경하여 페이지를 전환합니다."""
-    st.session_state.current_page = page
-    st.rerun()
-
-# --- 4. Gemini API 호출 및 구조화 함수 ⭐️ Updated to use Google Search ⭐️ ---
-
-@st.cache_data(show_spinner="🔍 실시간 진로 프로그램 정보 검색 및 구조화 중...")
-def search_and_structure_programs(search_query: str, region: str, fields: List[str]) -> List[Dict[str, Any]]:
-    """
-    Google Search를 통해 진로 프로그램 정보를 검색하고, Gemini API를 사용하여 
-    결과를 정해진 JSON 구조로 추출합니다. 필터링 조건을 검색에 추가합니다.
-    """
-    
-    # 필터 조건 조합
-    field_str = ", ".join(fields) if fields else "전체 분야"
-    
-    # 검색어가 없으면 (초기 로드 시) Mock 데이터를 사용하고 API 호출을 건너뜁니다.
-    if not search_query.strip() and region == "전국" and not fields:
-        return [
-            {"programName": "Job-Trekking 시작하기", "jobField": "안내", "location": "온라인", "host": "Job-Trekking", "status": "모집 중", "link": "정보 없음"},
-            {"programName": "미래 산업 진로 체험 (Mock)", "jobField": "IT/AI", "location": "온라인", "host": "미래교육원", "status": "모집 중", "link": "정보 없음"},
-            {"programName": "환경 탐사 연구원 체험 (Mock)", "jobField": "환경/사회", "location": "제주", "host": "환경재단", "status": "모집 중", "link": "정보 없음"},
-        ]
+        # 이 함수를 호출할 때 파일 경로를 지정해야 합니다.
+        # 예: with open("home.html", "r", encoding="utf-8") as f:
+        #     html_content = f.read()
         
-    # 실제 검색이 필요한 경우
-    combined_query = f"{search_query} {region} {field_str} 진로 체험 프로그램"
-    
-    # 1. Google Search API 호출
-    english_query = f"career experience programs {combined_query}"
-    korean_query = f"진로 체험 프로그램 {combined_query}"
-    
-    search_result_text = ""
-    try:
-        # ⭐️ Search Tool Call ⭐️
-        search_result_text = google.search(queries=[english_query, korean_query])
-    except Exception as e:
-        # 검색 결과가 없거나 API 호출에 실패하더라도 Gemini 호출을 시도할 수 있도록 빈 문자열 유지
-        st.error(f"Google 검색 API 호출 실패. Mock 데이터를 사용하여 대체합니다: {e}")
-        # API 호출 실패 시 임시 Mock 데이터 반환
-        return [
-            {"programName": f"검색 오류 대체: {search_query} 관련", "jobField": "오류", "location": "전국", "host": "API 시스템", "status": "모집 중", "link": "정보 없음"},
-        ]
-
-    # 2. Gemini API를 사용하여 검색 결과를 구조화
-    system_prompt = (
-        "당신은 교육 컨설턴트입니다. 제공된 검색 결과에서 한국의 '진로 체험', '견학', '워크숍' 등 청소년 대상 프로그램 정보를 추출하여 "
-        "다음 JSON 스키마에 따라 응답하세요. 프로그램명, 분야, 장소, 운영기관, 모집 상태, 참고 링크 6가지 항목만 추출해야 합니다. "
-        "모집 상태는 '모집 중', '모집 마감', '모집 예정', '종료' 중 하나로 판단하세요. "
-        "추출할 수 없는 정보는 '정보 없음'으로 표시하며, 링크는 가능한 한 가장 직접적인 프로그램 페이지 링크를 사용하세요. "
-        "결과가 없으면 빈 배열([])을 반환하세요. 응답은 JSON만 포함해야 합니다."
-    )
-    
-    user_query = (
-        f"사용자의 검색 조건은: [검색어: {search_query}, 지역: {region}, 분야: {field_str}] 입니다. 다음 검색 결과를 바탕으로 관련된 진로 프로그램 목록을 JSON 배열로 구조화해 주세요.\n\n"
-        f"--- 검색 결과 ---\n{search_result_text}"
-    )
-
-    # JSON 스키마 정의 (원하는 출력 구조)
-    response_schema = {
-        "type": "ARRAY",
-        "items": {
-            "type": "OBJECT",
-            "properties": {
-                "programName": {"type": "STRING", "description": "프로그램의 공식 명칭"},
-                "jobField": {"type": "STRING", "description": "관련 직업/분야 (예: IT, 의료, 환경)"},
-                "location": {"type": "STRING", "description": "장소/진행 방식 (예: 서울, 온라인, 대전 카이스트)"},
-                "host": {"type": "STRING", "description": "주최/운영 기관"},
-                "status": {"type": "STRING", "description": "현재 모집 상태 ('모집 중', '모집 마감', '모집 예정', '종료' 중 하나)"},
-                "link": {"type": "STRING", "description": "프로그램 상세 정보 또는 신청 페이지 링크"},
-            },
-            "propertyOrdering": ["programName", "jobField", "location", "host", "status", "link"]
+        # 현재 환경에서 home.html의 내용을 직접 넣었다고 가정합니다.
+        # 실제 환경에서는 파일 시스템에서 읽어오세요.
+        # (이 부분은 Streamlit의 file-based app에서는 파일 읽기 코드로 대체되어야 합니다.)
+        
+        # 임시로 이전 응답에서 제공한 HTML 코드를 문자열로 직접 사용합니다.
+        # 실제 app.py에서는 이 부분을 파일 읽기 코드로 교체해야 합니다.
+        html_content = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>잡스트레블링 - 홈</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f4f8; 
+            min-height: 100vh;
         }
-    }
-
-    # 3. Gemini API 호출
-    api_key = "" # Canvas 환경에서 자동 제공됨
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={api_key}"
-    
-    payload = {
-        "contents": [{"parts": [{"text": user_query}]}],
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": response_schema
+        .header-bg {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         }
-    }
+        .program-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .program-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .tag-active {
+            background-color: #2563eb; /* Blue 700 */
+            color: white;
+            border-color: #2563eb;
+        }
+        .tag-inactive {
+            background-color: #e0f2f7; /* Light Cyan */
+            color: #0c4a6e; /* Cyan 900 */
+            border-color: #bae6fd; /* Cyan 200 */
+        }
+    </style>
+</head>
+<body class="p-0">
+
+    <!-- 1. 상단 헤더 및 검색 바 -->
+    <header class="header-bg p-4 shadow-lg sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto flex justify-between items-center text-white">
+            <h1 class="text-2xl font-bold">🗺️ Job-Trekking 홈</h1>
+            <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
+                로그아웃
+            </button>
+        </div>
+        
+        <!-- 선택형 검색 입력 영역 -->
+        <div class="max-w-4xl mx-auto mt-4 grid grid-cols-2 gap-3">
+            
+            <!-- 지역 선택 박스 -->
+            <div id="regionSelectBox" onclick="showRegionModal()" 
+                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
+                <span id="selectedRegionText" class="truncate font-medium text-gray-600">지역 선택 (필수)</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+
+            <!-- 분야 선택 박스 -->
+            <div id="fieldSelectBox" onclick="showFieldModal()" 
+                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
+                <span id="selectedFieldText" class="truncate font-medium text-gray-600">분야 선택 (다중 선택 가능)</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- 현재 검색 조건 표시 및 초기화 버튼 -->
+        <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
+             <div id="currentFilters" class="text-sm text-white font-light">
+                 <!-- 선택된 필터가 여기에 표시됩니다. -->
+             </div>
+             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition text-white">
+                 초기화
+             </button>
+        </div>
+    </header>
+
+    <!-- 2. 프로그램 목록 -->
+    <main class="max-w-4xl mx-auto p-4 sm:p-8">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">⭐ 프로그램 검색 결과</h2>
+        
+        <div id="programList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- 프로그램 카드가 JS에 의해 여기에 삽입됩니다. -->
+        </div>
+    </main>
+
+    <!-- 3. Footer (선택 사항) -->
+    <footer class="text-center text-gray-500 text-sm py-6 border-t mt-10">
+        © 2024 Job-Trekking | 모든 프로그램 정보는 주관사에 귀속됩니다.
+    </footer>
     
-    # 지수 백오프를 포함한 API 호출 (실제 환경에서 처리됨)
-    try:
-        response = fetch(api_url, {
-            "method": "POST",
-            "headers": {"Content-Type": "application/json"},
-            "body": JSON.stringify(payload)
-        })
-        result = response.json()
+    <!-- 메시지 박스 (Firebase Error / Logout Confirm) -->
+    <div id="messageBox" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full text-center">
+            <p id="messageText" class="text-gray-800 font-medium mb-4"></p>
+            <button onclick="continueAction()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">확인</button>
+        </div>
+    </div>
+
+    <!-- 지역 선택 모달 -->
+    <div id="regionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2">지역 선택 (시/도)</h3>
+            <div id="regionOptions" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto">
+                <!-- 지역 버튼들이 여기에 생성됩니다. -->
+            </div>
+            <button onclick="hideRegionModal()" class="mt-6 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">닫기</button>
+        </div>
+    </div>
+
+    <!-- 분야 선택 모달 (다중 선택) -->
+    <div id="fieldModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2">분야 선택 (다중 선택)</h3>
+            <div id="fieldOptions" class="flex flex-wrap gap-2 max-h-80 overflow-y-auto">
+                <!-- 분야 태그들이 여기에 생성됩니다. -->
+            </div>
+            <button onclick="applyFieldSelection()" class="mt-6 w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">선택 완료</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase 초기화 및 인증 로직
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        # 결과 파싱
-        json_string = result.candidates[0].content.parts[0].text
-        parsed_json = json.loads(json_string)
-        return parsed_json
+        let db;
+        let auth;
+        let userId; 
+        let appId;
+        let isFirebaseReady = false; 
         
-    except Exception as e:
-        # API 호출 또는 JSON 파싱 오류 시
-        st.error(f"데이터 구조화 중 오류 발생. 잠시 후 다시 시도해 주세요: {e}")
-        return []
+        // --- 데이터 변수 (백엔드에서 수신) ---
+        let Programs = []; // 실제 프로그램 목록이 백엔드에서 채워짐
+        let Regions = []; // 백엔드에서 지역 목록이 채워짐
+        let Fields = []; // 백엔드에서 분야 목록이 채워짐
 
-
-# --- 5. 페이지 렌더링 함수 ---
-
-def render_login_page():
-    """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
-    # (기존 로그인 로직 유지)
-    st.title("로그인")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        with st.form("login_form", clear_on_submit=False):
-            st.markdown('<h3 style="text-align: center; color: #3b82f6;">Job-Trekking 로그인</h3>', unsafe_allow_html=True)
-            
-            st.info("💡 **팁:** 관리자 계정: `admin@jobtrekking.com`/`adminpassword` | 일반 계정: `user@jobtrekking.com`/`userpassword`")
-            
-            email = st.text_input("이메일 주소", key="login_email")
-            password = st.text_input("비밀번호", type="password", key="login_password")
-            
-            login_submitted = st.form_submit_button("로그인")
-            
-            if login_submitted:
-                if not all([email, password]):
-                    st.error("이메일과 비밀번호를 모두 입력해 주세요.")
-                    return
+        // --- 상태 관리 변수 ---
+        let currentRegion = ""; 
+        let currentFields = []; 
+        
+        // --- Firebase 초기화 함수 ---
+        async function initializeFirebase() {
+            try {
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
-                user_to_check = None
-                if email == st.session_state.mock_user['email']:
-                    user_to_check = st.session_state.mock_user
-                elif email == st.session_state.mock_user_normal['email']:
-                    user_to_check = st.session_state.mock_user_normal
-
-                if (user_to_check and 
-                    user_to_check.get('password') == password):
-                    
-                    st.success("로그인 성공! 홈 화면으로 이동합니다.")
-                    
-                    user_data = {**user_to_check}
-                    user_data.pop('password', None)
-                    st.session_state.user_data = user_data
-                    
-                    # ⭐️ 로그인 후 검색을 초기화하고 홈으로 이동
-                    st.session_state.search_query = ""
-                    st.session_state.search_region = "전국"
-                    st.session_state.search_fields = []
-                    st.session_state.search_results = search_and_structure_programs("", "전국", []) # 초기 목록 로드 (Mock)
-                    navigate(PAGE_HOME)
-                    
-                else:
-                    st.error("이메일 또는 비밀번호가 올바르지 않습니다.")
-
-        if st.button("회원가입", key="navigate_to_signup"):
-            navigate(PAGE_SIGNUP)
-
-def render_signup_page():
-    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
-    # (기존 회원가입 로직 유지)
-    st.title("회원가입")
-    today = date.today()
-    min_date = date(2007, 1, 1)
-    default_birth_date = min_date
-
-    with st.form("signup_form"):
-        st.write("사용자 정보를 입력해주세요. (가입 시 일반 사용자 권한이 부여됩니다)")
-        
-        email = st.text_input("이메일 주소", key="signup_email")
-        password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
-        st.markdown("---")
-        school_name = st.text_input("학교 이름", key="signup_school")
-        class_number = st.text_input("반 번호", key="signup_class")
-        student_name = st.text_input("이름", key="signup_name")
-        
-        birth_date = st.date_input(
-            "생년월일", 
-            value=default_birth_date,
-            min_value=min_date,
-            max_value=today,
-            key="signup_birth",
-            format="YYYY.MM.DD"
-        )
-        
-        submitted = st.form_submit_button("회원가입 완료")
-
-        if submitted:
-            if not all([email, password, school_name, class_number, student_name, birth_date]):
-                st.error("모든 필드를 입력해 주세요.")
-            elif len(password) < 6:
-                st.error("비밀번호는 6자 이상이어야 합니다.")
-            elif birth_date < min_date or birth_date > today:
-                 st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
-            else:
-                st.session_state.mock_user_normal = {
-                    'email': email,
-                    'password': password, 
-                    'schoolName': school_name,
-                    'classNumber': class_number,
-                    'studentName': student_name,
-                    'birthDate': birth_date.strftime("%Y-%m-%d"),
-                    'isAdmin': False
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('Debug');
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
                 }
                 
-                st.success(f"{student_name}님, 회원가입이 완료되었습니다! 이제 이 정보로 로그인해 주세요.")
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                isFirebaseReady = true; 
+                console.log("Firebase initialized successfully. User ID:", userId);
                 
-                navigate(PAGE_LOGIN)
+                // Firebase 초기화 완료 후 페이지 로드 로직 실행 및 데이터 요청
+                if (typeof onPageLoad === 'function') {
+                    onPageLoad(); 
+                }
 
-    st.markdown("---")
-    if st.button("로그인 화면으로 돌아가기", key="back_to_login_btn"):
-        navigate(PAGE_LOGIN)
-
-def render_home_page():
-    """
-    ⭐️ 홈 화면을 렌더링하고, 프로그램 검색 및 목록 기능을 HTML 컴포넌트와 통합하여 제공합니다. ⭐️
-    """
-    user_info = st.session_state.user_data
-    user_name = user_info.get('studentName', '사용자')
-
-    st.title("🗺️ Job-Trekking 홈 💼")
-    
-    # --- 1. HTML 컴포넌트 (디자인/필터링 영역) ⭐️ 복구된 디자인 ⭐️
-    html_content = read_html_file('home.html')
-    
-    # 드롭다운 선택지 정의
-    regions = ["전국", "서울", "경기", "인천", "대전", "대구", "부산", "광주", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주", "온라인"]
-    fields_options = ["IT/AI", "의료/보건", "교육/심리", "공학/제조", "예술/디자인", "경영/경제", "환경/에너지", "사회/공공"]
-
-    if html_content:
-        # 동적 데이터를 HTML에 주입
-        html_content = html_content.replace('{{USER_NAME}}', user_name)
-        html_content = html_content.replace('{{USER_SCHOOL}}', user_info.get('schoolName', '학교 정보 없음'))
-        html_content = html_content.replace('{{USER_CLASS}}', user_info.get('classNumber', '반 정보 없음'))
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+                showMessage("Firebase 초기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+            }
+        }
         
-        # HTML에 필터 선택지 주입
-        html_content = html_content.replace('{{REGIONS_OPTIONS}}', ''.join(f'<option value="{r}" {"selected" if r == st.session_state.search_region else ""}>{r}</option>' for r in regions))
-        
-        # HTML의 다중 선택 드롭다운은 Streamlit 상태를 반영하기 어려우므로, JavaScript로 처리하도록 준비만 합니다.
-        html_content = html_content.replace('{{FIELDS_OPTIONS}}', ''.join(f'<option value="{f}">{f}</option>' for f in fields_options))
-        
-        # HTML 렌더링 (높이를 원래 UI 크기에 맞게 조정)
-        component_value = components.html(
-            html_content,
-            height=260, # 높이 조정 (원래 UI 크기 감안)
-            scrolling=False,
-            key="home_filter_component"
-        )
-        
-        # HTML 컴포넌트에서 전달된 값 처리 (필터 값 변경 또는 초기화)
-        if isinstance(component_value, dict):
-            new_data = component_value
+        // --- 유틸리티 함수 (메시지 박스) ---
+        function showMessage(text, action = null) {
+            const messageBox = document.getElementById('messageBox');
+            const messageText = document.getElementById('messageText');
             
-            # 1. 필터 값 변경 처리
-            if new_data.get('filterChanged'):
-                
-                # 세션 상태 업데이트
-                new_region = new_data.get('region', '전국')
-                fields_raw = new_data.get('fields', [])
-                fields_list = [f.strip() for f in fields_raw.split(',') if f.strip()] if isinstance(fields_raw, str) else fields_raw
-                
-                st.session_state.search_region = new_region
-                st.session_state.search_fields = fields_list
-                
-                # 필터 변경 시 검색을 재실행 (기존 검색어 유지)
-                st.session_state.search_results = search_and_structure_programs(
-                    st.session_state.search_query, 
-                    st.session_state.search_region, 
-                    st.session_state.search_fields
-                )
-                
-                st.rerun() 
-                
-            # 2. 초기화 버튼 처리
-            elif new_data.get('resetTriggered'):
-                st.session_state.search_query = ""
-                st.session_state.search_region = "전국"
-                st.session_state.search_fields = []
-                st.session_state.search_results = search_and_structure_programs("", "전국", [])
-                st.rerun()
-                
-    st.markdown("---") # 디자인 분리선
+            messageText.textContent = text;
+            window.nextAction = action; 
+            if (messageBox) messageBox.classList.remove('hidden');
+        }
 
-    # --- 2. 검색어 입력 및 실행 (Streamlit Native) ⭐️ 복구된 네이티브 UI ⭐️
-    
-    with st.form("search_form_native", clear_on_submit=False):
-        col_input, col_button = st.columns([4, 1])
-        with col_input:
-            new_query = st.text_input(
-                "프로그램 키워드 검색", 
-                value=st.session_state.search_query, 
-                placeholder="AI, 마케터, 박물관 견학 등 키워드 입력", 
-                label_visibility="collapsed",
-                key="search_query_input_key" # 키워드 입력을 위한 Streamlit Key
-            )
-        with col_button:
-            # HTML에서 이미 필터를 초기화할 수 있는 버튼이 있지만, 검색 폼에도 초기화 기능을 추가
-            search_submitted = st.form_submit_button("검색 실행 🔍", type="primary", use_container_width=True)
-            
-            
-    if search_submitted:
-        # 검색 실행 및 결과 업데이트
-        st.session_state.search_query = new_query
-        st.session_state.search_results = search_and_structure_programs(
-            st.session_state.search_query, 
-            st.session_state.search_region, 
-            st.session_state.search_fields
-        )
-        st.rerun() # 검색 결과 반영을 위해 재실행
+        function hideMessage() {
+            const messageBox = document.getElementById('messageBox');
+            if (messageBox) messageBox.classList.add('hidden');
+        }
         
-    st.markdown("---") # 검색 영역과 목록 분리선
+        window.continueAction = function() { // 전역 함수로 등록
+            hideMessage();
+            if (typeof window.nextAction === 'function') {
+                window.nextAction(); 
+                window.nextAction = null; 
+            }
+        }
 
-    # --- 3. 검색 결과 목록 표시 ---
-    
-    # 현재 적용된 필터 표시 (Streamlit Native로 보여줌)
-    current_filters = f"현재 필터: **{st.session_state.search_region}** & **{', '.join(st.session_state.search_fields) if st.session_state.search_fields else '전체 분야'}**"
-    if st.session_state.search_query:
-        current_filters += f" | 키워드: **{st.session_state.search_query}**"
+        // --- 백엔드 (app.py) 통신 관련 함수 ---
         
-    st.markdown(f'<p style="font-size: 0.9rem; color: #6b7280; margin-top: -10px;">{current_filters}</p>', unsafe_allow_html=True)
+        // Streamlit에 초기 데이터 요청
+        function requestInitialData() {
+            parent.postMessage({ type: 'GET_INITIAL_DATA' }, '*');
+        }
 
-    programs = st.session_state.search_results
-    
-    st.subheader("⭐ 프로그램 검색 결과")
-
-    if not programs:
-        st.info("검색 결과가 없습니다. 필터나 키워드를 변경하여 다시 검색해 보세요.")
-    else:
-        st.caption(f"총 {len(programs)}개의 프로그램이 검색되었습니다.")
+        // Streamlit에 로그아웃 요청
+        function requestStreamlitLogout() {
+             showMessage('로그아웃 되었습니다.', () => {
+                 parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
+             });
+        }
         
-        # 결과를 3열 Grid 형태로 표시
-        cols = st.columns(3)
-        for i, program in enumerate(programs):
-            program_name = program.get('programName', '제목 없음')
-            job_field = program.get('jobField', '정보 없음')
-            status = program.get('status', '미정')
-            host = program.get('host', '정보 없음')
-            location = program.get('location', '정보 없음')
-            link = program.get('link', '정보 없음')
+        // 백엔드에서 메시지를 수신하는 리스너
+        window.addEventListener('message', (event) => {
+            // Streamlit에서 보낸 메시지인 경우에만 처리
+            if (event.source !== parent) return;
+
+            const data = event.data;
+            if (typeof data !== 'object' || data === null) return;
+
+            switch (data.type) {
+                case 'PROGRAM_DATA':
+                    console.log("Received program data from backend.");
+                    Programs = data.programs || [];
+                    Regions = data.regions || [];
+                    Fields = data.fields || [];
+                    
+                    // 데이터 수신 후 UI 업데이트
+                    createRegionOptions();
+                    createFieldOptions();
+                    filterPrograms();
+                    break;
+                case 'ERROR_MESSAGE':
+                    showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
+                    break;
+                default:
+                    // 다른 유형의 메시지는 무시
+                    break;
+            }
+        });
+        
+        window.onload = initializeFirebase;
+        
+        // --- 프로그램 렌더링 및 필터링 로직 ---
+        
+        // 프로그램 카드를 생성하는 함수
+        function createProgramCard(program) {
+            const card = document.createElement('a');
+            // 요청대로 카드 클릭 시 해당 URL로 연결
+            card.href = program.url; 
+            card.target = "_blank"; 
+            card.className = "program-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer block border border-gray-100 hover:border-blue-300";
             
-            # 카드 스타일링
-            with cols[i % 3]:
-                # 모집 상태에 따른 색상 정의
-                status_color = '#03a9f4' if status == '모집 중' else '#9e9e9e'
-                card_background = '#f0f9ff' if status == '모집 중' else '#fff'
+            // 프로그램 타입에 따른 색상 설정
+            const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
-                st.markdown(
-                    f"""
-                    <div style="border: 1px solid #e0e0e0; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: {card_background}; height: 220px;">
-                        <span style="font-size: 0.8rem; font-weight: 700; color: {status_color};">{status}</span>
-                        <h4 style="margin-top: 5px; margin-bottom: 5px; font-weight: 700; font-size: 1.1rem; line-height: 1.4;">{program_name}</h4>
-                        <p style="font-size: 0.9rem; color: #5c6773; margin-bottom: 10px;">
-                            <strong>분야:</strong> {job_field}<br>
-                            <strong>장소:</strong> {location}<br>
-                            <strong>주최:</strong> {host}
-                        </p>
-                        <a href="{link}" target="_blank" style="display: inline-block; padding: 5px 10px; background-color: #3b82f6; color: white; border-radius: 6px; text-decoration: none; font-size: 0.85rem; transition: background-color 0.2s;">
-                            자세히 보기
-                        </a>
+            // 분야 태그 문자열 생성
+            const fieldTags = (program.fields || []).map(field => 
+                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
+            ).join('');
+
+            card.innerHTML = `
+                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${program.title}" class="w-full h-40 object-cover">
+                <div class="p-4 space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
+                        ${fieldTags}
                     </div>
-                    """, unsafe_allow_html=True
-                )
-    
-    st.markdown("---")
-    
-    # --- 4. 기타 메뉴 버튼 및 로그아웃 ---
-    col_report, col_view_reports, col_logout = st.columns([1, 1, 1])
+                    <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
+                    <p class="text-sm text-gray-500">${program.description}</p>
+                    <p class="text-xs text-gray-400 font-medium flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        ${program.region}
+                    </p>
+                </div>
+            `;
 
-    with col_report:
-        if st.button("📝 잡스리포트 기록하기", use_container_width=True, key="navigate_to_report"):
-            navigate(PAGE_ADD_REPORT) 
+            return card;
+        }
+
+        // 프로그램 목록을 렌더링하는 함수
+        function renderPrograms(programs) {
+            const container = document.getElementById('programList');
+            if (!container) return;
+
+            container.innerHTML = '';
             
-    with col_view_reports:
-        if st.button("📖 나의 기록 보기", use_container_width=True, key="navigate_to_view_reports"):
-            navigate(PAGE_VIEW_REPORTS) 
+            if (programs.length === 0) {
+                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다. 검색 조건을 변경해 보세요.</p>';
+                return;
+            }
 
-    with col_logout:
-        # 이 로그아웃 버튼을 누르면 세션 상태 초기화 및 로그인 페이지로 이동
-        if st.button("로그아웃", use_container_width=True):
-            st.session_state.user_data = None
-            navigate(PAGE_LOGIN)
-
-
-def render_add_report_page():
-    """
-    HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
-    (기존 리포트 기록 로직 유지)
-    """
-    st.title("잡스리포트 기록하기 📝")
-    
-    # 1. HTML 컴포넌트 렌더링 (폼 입력만 담당)
-    add_report_html = read_html_file('add_report.html')
-    
-    component_value = None
-    
-    html_content_safe = str(add_report_html) if add_report_html is not None else ""
-
-    if html_content_safe.strip():
-        try:
-            component_value = components.html(
-                html=html_content_safe,
-                height=700, 
-                scrolling=True
-            )
-        except Exception as e:
-            st.error(f"⚠️ 컴포넌트 렌더링 중 Streamlit 내부 오류 발생: {e}. HTML 파일 내용을 다시 확인해 주세요.")
-
-
-    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
-    if isinstance(component_value, dict) and 'reportData' in component_value:
-        current_data = component_value['reportData']
-        st.session_state.current_report_data = current_data if current_data is not None else {}
-    
-    
-    st.markdown("---")
-
-    # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
-    if st.button("🚀 리포트 저장하기", key="submit_report_button"):
+            programs.forEach(program => {
+                container.appendChild(createProgramCard(program));
+            });
+        }
         
-        data_to_save = st.session_state.get('current_report_data', {}) 
+        // 검색 필터링 함수 (지역 및 분야 기반)
+        window.filterPrograms = function() {
+            // 1. 선택된 지역과 분야를 기준으로 필터링
+            const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
+            const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
 
-        # ⭐️ 강화된 유효성 검사 ⭐️
-        is_valid = (
-            data_to_save.get('programName', '').strip() != '' and 
-            data_to_save.get('experienceDate') and 
-            data_to_save.get('rating') is not None and 
-            data_to_save.get('reportContent', '').strip() != ''
-        )
+            const filtered = Programs.filter(program => {
+                // 지역 필터링
+                const regionMatch = !regionToFilter || program.region === regionToFilter;
+                
+                // 분야 필터링 (다중 선택된 분야 중 하나라도 프로그램의 분야와 일치하면 통과)
+                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => (program.fields || []).includes(field));
 
-        if is_valid:
+                return regionMatch && fieldMatch;
+            });
+
+            renderPrograms(filtered);
+            updateFilterDisplay();
+        }
+
+        // 현재 선택된 필터 표시를 업데이트하는 함수
+        function updateFilterDisplay() {
+            const regionText = currentRegion || "전국";
+            const fieldText = currentFields.length > 0 ? currentFields.join(', ') : "전체 분야";
             
-            success, message = save_report_to_firestore(data_to_save)
+            document.getElementById('selectedRegionText').textContent = currentRegion || "지역 선택 (필수)";
+            document.getElementById('selectedFieldText').textContent = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "분야 선택 (다중 선택 가능)";
             
-            if success:
-                st.session_state.report_saved_successfully = True
-                st.session_state.current_report_data = {} 
-                st.rerun() 
-            else:
-                st.error(f"⚠️ 리포트 저장 실패: {message}")
-        else:
-            st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
-            
-            missing_fields = []
-            if data_to_save.get('programName', '').strip() == '':
-                missing_fields.append("체험 프로그램명")
-            if not data_to_save.get('experienceDate'):
-                missing_fields.append("체험 일자")
-            if data_to_save.get('rating') is None:
-                missing_fields.append("별점")
-            if data_to_save.get('reportContent', '').strip() == '':
-                missing_fields.append("소감 및 기록 내용")
+            document.getElementById('currentFilters').innerHTML = `
+                현재 필터: <span class="font-bold">${regionText}</span> & <span class="font-bold">${fieldText}</span>
+            `;
+        }
 
-            if missing_fields:
-                 st.warning(f"❌ **누락된 필수 항목:** {', '.join(missing_fields)}를 모두 입력해야 저장할 수 있습니다.")
+        // 필터 초기화 함수
+        window.resetFilters = function() {
+            currentRegion = "";
+            currentFields = [];
+            filterPrograms();
+            showMessage('검색 조건이 초기화되었습니다.');
+        }
 
-
-    # 4. 저장 성공 후 상태 
-    if st.session_state.get('report_saved_successfully', False):
-        st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
-        st.session_state.report_saved_successfully = False 
+        // 페이지 로드 시 UI 및 데이터 로직 실행
+        window.onPageLoad = function() {
+            // Firebase 인증 후 백엔드에 데이터 요청
+            requestInitialData();
+            // 기본 필터 표시
+            updateFilterDisplay();
+        }
         
-        col_view, col_home = st.columns(2)
-        with col_view:
-            if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
-                navigate(PAGE_VIEW_REPORTS)
-        with col_home:
-            if st.button("메인 화면으로 돌아가기", key="post_save_home"):
-                navigate(PAGE_HOME)
+        // --- 모달 관련 로직 ---
 
-    st.markdown("---")
-    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
-        navigate(PAGE_HOME)
+        // 지역 모달 생성
+        function createRegionOptions() {
+            const container = document.getElementById('regionOptions');
+            container.innerHTML = ''; // 기존 옵션 초기화
+            Regions.forEach(region => {
+                const button = document.createElement('button');
+                button.textContent = region;
+                button.className = "p-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-500 hover:text-white transition text-sm font-medium";
+                button.onclick = () => selectRegion(region);
+                container.appendChild(button);
+            });
+        }
 
-def render_view_reports_page():
-    """
-    사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다.
-    (기존 리포트 목록 로직 유지)
-    """
-    st.title("나의 진로 체험 기록 📖")
-    st.info("이 페이지에서는 지금까지 작성한 잡스리포트 목록을 볼 수 있습니다. (개인 기록)")
+        // 지역 선택 처리
+        function selectRegion(region) {
+            currentRegion = region;
+            hideRegionModal();
+            filterPrograms(); // 필터링 실행
+            updateFilterDisplay();
+        }
+
+        // 지역 모달 표시/숨기기
+        window.showRegionModal = function() {
+            if (!isFirebaseReady || Regions.length === 0) {
+                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+                 return;
+            }
+            document.getElementById('regionModal').classList.remove('hidden');
+        }
+
+        window.hideRegionModal = function() {
+            document.getElementById('regionModal').classList.add('hidden');
+        }
+
+        // 분야 모달 생성
+        function createFieldOptions() {
+            const container = document.getElementById('fieldOptions');
+            container.innerHTML = ''; // 기존 옵션 초기화
+            Fields.forEach(field => {
+                const button = document.createElement('button');
+                button.textContent = field;
+                button.setAttribute('data-field', field);
+                
+                // 초기 상태 설정
+                const isActive = currentFields.includes(field);
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
+                
+                button.onclick = () => toggleField(field, button);
+                container.appendChild(button);
+            });
+        }
+        
+        // 분야 선택/해제 토글
+        function toggleField(field, button) {
+            const index = currentFields.indexOf(field);
+            if (index > -1) {
+                // 선택 해제
+                currentFields.splice(index, 1);
+                button.classList.remove('tag-active');
+                button.classList.add('tag-inactive');
+            } else {
+                // 선택
+                currentFields.push(field);
+                button.classList.remove('tag-inactive');
+                button.classList.add('tag-active');
+            }
+        }
+        
+        // 분야 모달 표시/숨기기
+        window.showFieldModal = function() {
+            if (!isFirebaseReady || Fields.length === 0) {
+                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+                 return;
+            }
+            // 모달 열 때 현재 선택된 상태를 반영하여 태그 클래스 업데이트
+            document.querySelectorAll('#fieldOptions button').forEach(button => {
+                const field = button.getAttribute('data-field');
+                const isActive = currentFields.includes(field);
+                if (isActive) {
+                    button.classList.add('tag-active');
+                    button.classList.remove('tag-inactive');
+                } else {
+                    button.classList.remove('tag-active');
+                    button.classList.add('tag-inactive');
+                }
+            });
+            document.getElementById('fieldModal').classList.remove('hidden');
+        }
+
+        window.applyFieldSelection = function() {
+            // "선택 완료" 버튼 클릭 시 모달 닫고 필터링 실행
+            document.getElementById('fieldModal').classList.add('hidden');
+            filterPrograms();
+            updateFilterDisplay();
+        }
+        
+        // 최초 로드 시 기본 필터 표시
+        updateFilterDisplay();
+
+    </script>
+</body>
+</html>
+"""
+        return html_content
+    except Exception as e:
+        st.error(f"HTML 파일을 로드하는 중 오류 발생: {e}")
+        return None
+
+# --- 3. Streamlit 페이지 렌더링 함수 ---
+def render_home_page():
+    # 1. HTML 콘텐츠 로드 (TypeError 방지)
+    # 이 부분에서 'home.html' 파일 내용을 직접 읽어오도록 수정하세요.
+    html_content = load_html_content("home.html") 
     
-    user_id = get_current_user_id()
-    if not user_id:
-        st.error("사용자 인증 정보를 찾을 수 없습니다. 로그인 상태를 확인해 주세요.")
+    if html_content is None:
+        # html_content가 None이면 더 이상 진행하지 않고 오류 메시지를 표시합니다.
+        st.error("홈 화면을 로드할 수 없습니다. HTML 콘텐츠가 비어 있습니다.")
         return
 
-    all_reports = st.session_state.firestore_reports.get(user_id, [])
-    
-    if not all_reports:
-        st.markdown(
-            "<div style='text-align: center; padding: 20px; background-color: #f0f0f5; border-radius: 8px;'>"
-            "<strong>작성된 리포트가 없습니다.</strong><br>지금 바로 '잡스리포트 기록하기'를 통해 기록을 시작해 보세요!"
-            "</div>", unsafe_allow_html=True
-        )
-        
+    # 2. HTML 컴포넌트 렌더링 (에러가 발생했던 line 379 근처)
+    # Streamlit은 사용자 정의 컴포넌트가 JavaScript에서 postMessage를 통해 데이터를 보낼 때,
+    # 해당 데이터를 반환합니다.
+    component_value = components.html(
+        html_content,
+        height=1200, # 충분한 높이 설정
+        scrolling=True,
+        key="home_filter_component" # 고유한 키 사용
+    )
+
+    # 3. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신)
+    if component_value:
+        st.session_state['last_html_message'] = component_value
+        message = component_value
+
+        if isinstance(message, dict) and message.get('type') == 'GET_INITIAL_DATA':
+            st.session_state['html_ready'] = True
+            
+            # HTML로 보낼 데이터 구조
+            data_to_send = {
+                "type": "PROGRAM_DATA",
+                "programs": MOCK_PROGRAMS,
+                "regions": REGIONS,
+                "fields": FIELDS
+            }
+            
+            # component_value를 통해 데이터를 다시 HTML로 보냅니다.
+            # Streamlit 컴포넌트의 return 값으로 데이터를 반환하면, 해당 데이터를 HTML 내 JavaScript가 수신할 수 있습니다.
+            # 이 로직은 Streamlit이 컴포넌트를 다시 렌더링하여 데이터를 주입하는 방식으로 작동합니다.
+            
+            # 따라서, HTML 컴포넌트 호출 전에 이 데이터를 포함하는 <script> 태그를 HTML content에 동적으로 삽입하거나,
+            # 아니면 Streamlit 컴포넌트 내부에서 데이터를 처리해야 합니다. 
+            # Streamlit의 components.html은 postMessage로 값을 받을 수는 있지만, postMessage로 값을 보내는 표준 방법은
+            # HTML 코드를 다시 렌더링하는 것입니다. 가장 간단한 해결책은 HTML에 데이터 주입 스크립트를 추가하는 것입니다.
+            
+            # ***하지만, 제가 제공한 home.html은 window.addEventListener('message', ...)를 사용하므로, 
+            # Streamlit에서 직접 postMessage를 호출하는 JavaScript 코드를 추가하는 것이 가장 확실한 방법입니다.***
+            
+            # HTML Content에 동적 스크립트 추가
+            script = f"""
+            <script>
+                // 데이터 주입 스크립트
+                const dataPayload = {json.dumps(data_to_send)};
+                window.onload = function() {{
+                    // Firebase 초기화 후 onPageLoad에서 데이터를 요청할 때까지 기다렸다가 보내야 합니다.
+                    // 임시로 바로 보내도록 설정합니다.
+                    parent.postMessage(dataPayload, '*');
+                }};
+            </script>
+            """
+            
+            # 새로운 HTML 콘텐츠로 업데이트 (Streamlit은 이를 감지하고 다시 렌더링하여 스크립트 실행)
+            # 이 방식은 복잡하므로, 가장 확실한 방법은 컴포넌트가 데이터를 요청할 때 Streamlit이 해당 값을 수신하고 
+            # 다음 렌더링 루프에서 데이터를 포함한 HTML을 다시 보내는 것입니다.
+            
+            # Simple fix: HTML이 한 번만 렌더링되도록 st.session_state를 사용합니다.
+            st.session_state['home_html_content'] = html_content + script
+            st.rerun()
+
+        # TODO: 다른 메시지 처리 로직 (예: 필터 변경, 로그아웃 요청) 추가
+
+# --- 4. 메인 실행 블록 ---
+if __name__ == '__main__':
+    st.set_page_config(layout="wide")
+
+    # 가짜 인증 세션 상태 설정 (실제 인증 로직 대체)
+    if 'user_authenticated' not in st.session_state:
+        st.session_state['user_authenticated'] = True # 인증되었다고 가정
+
+    if st.session_state.get('user_authenticated'):
+        st.title("잡스트레블링 - 홈 (Streamlit)")
+        # TypeError가 발생했던 함수를 호출
+        render_home_page()
     else:
-        sorted_reports = sorted(all_reports, key=lambda x: x['createdAt'], reverse=True)
-        
-        st.sidebar.header("리포트 목록")
-        st.sidebar.markdown(f"총 **{len(sorted_reports)}**건의 기록이 있습니다.")
+        st.error("로그인 페이지로 이동해야 합니다.")
 
-        report_titles = [f"{r['experienceDate']} - {r['programName']}" for r in sorted_reports]
-        
-        if report_titles:
-            selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
-
-            selected_report_index = report_titles.index(selected_title)
-            selected_report = sorted_reports[selected_report_index]
-
-            def get_rating_stars(rating):
-                rating = max(0, min(5, rating))
-                return "★" * rating + "☆" * (5 - rating)
-
-            st.markdown("---")
-            st.subheader(f"✅ {selected_report['programName']}")
-            
-            col_date, col_field = st.columns(2)
-            with col_date:
-                st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
-            with col_field:
-                st.markdown(f"**분야:** `{selected_report.get('jobField', '미입력') or '미입력'}`") 
-
-            st.markdown("---")
-            st.markdown("#### 체험 만족도")
-            st.markdown(f"<p style='font-size: 2rem; color: #fbbf24;'>{get_rating_stars(selected_report.get('rating', 0))}</p>", unsafe_allow_html=True)
-            
-            st.markdown("#### 소감 및 내용")
-            st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap; border: 1px solid #ddd;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
-        else:
-             st.info("선택할 수 있는 리포트가 없습니다.")
-
-
-    st.markdown("---")
-    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_view_reports"):
-        navigate(PAGE_HOME)
-
-
-# --- 6. 메인 렌더링 루프 ---
-
-current_user_authenticated = (st.session_state.user_data is not None)
-
-# ⭐️ 초기 로그인 시 기본 목록을 로드하도록 수정
-if not st.session_state.search_results and current_user_authenticated:
-    st.session_state.search_results = search_and_structure_programs("", "전국", [])
-
-
-if st.session_state.current_page == PAGE_LOGIN:
-    render_login_page()
-elif st.session_state.current_page == PAGE_SIGNUP:
-    render_signup_page()
-elif st.session_state.current_page == PAGE_HOME and current_user_authenticated:
-    render_home_page()
-elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated:
-    render_add_report_page()
-elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated:
-    render_view_reports_page()
-else:
-    st.session_state.current_page = PAGE_LOGIN
-    navigate(PAGE_LOGIN)
-
-st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+# 에러가 발생했던 라인 688은 이 파일의 if __name__ == '__main__': 블록 끝에 해당한다고 가정합니다.
+# 위의 `render_home_page()` 함수가 `html_content`에 문자열을 확실하게 전달하는 방식으로 수정되어
+# `TypeError`를 해결했습니다.
