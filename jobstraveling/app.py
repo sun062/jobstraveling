@@ -105,11 +105,13 @@ def get_base64_decoder_html():
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
     
-    Streamlit의 내부 포맷팅 충돌을 완전히 회피하기 위해 문자열 연결을 사용합니다.
+    Streamlit의 내부 포맷팅 충돌을 완전히 회피하기 위해 모든 JS 중괄호를 이스케이프하고
+    문자열 연결을 사용합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # 단순 문자열 연결을 사용하여 Base64 콘텐츠를 삽입합니다. (TypeError 회피 핵심)
+    # 모든 JS 중괄호를 이스케이프 ({{, }}) 처리하여 Streamlit의 .format() 충돌 방지
+    # Base64 콘텐츠는 Python 문자열 연결로 안전하게 삽입
     html_content = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -124,38 +126,37 @@ def get_base64_decoder_html():
         const encoded = '""" + encoded_content + """'; 
         
         // Base64 디코딩 함수 
-        function decodeBase64(base64) {
+        function decodeBase64(base64) {{
             // 브라우저 API를 사용하여 디코딩
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
+            for (let i = 0; i < len; i++) {{
                 bytes[i] = binary_string.charCodeAt(i);
-            }
+            }}
             return new TextDecoder().decode(bytes);
-        }
+        }}
 
         // 디코딩 및 삽입
-        try {
+        try {{
             const decodedHtml = decodeBase64(encoded);
             // document.body 대신 document 전체의 내용을 덮어씁니다.
             document.open();
             document.write(decodedHtml);
             document.close();
-        } catch(e) {
+        }} catch(e) {{
             // 오류 발생 시 사용자에게 메시지 표시
             const msgEl = document.getElementById('loading-message');
-            if (msgEl) {
+            if (msgEl) {{
                 msgEl.style.color = 'red';
                 msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
-            }
+            }}
             console.error("Base64 decoding failed:", e);
-        }
+        }}
     </script>
 </body>
 </html>
 """
-    # JS의 중괄호는 이 코드 블록에서 Python 포맷팅 문법으로 해석되지 않아 안전합니다.
     return html_content
 
 
@@ -593,7 +594,7 @@ def get_base_html_content():
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
 def render_login_page():
     
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (문자열 연결 방식으로 수정)
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다.
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
