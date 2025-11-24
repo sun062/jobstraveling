@@ -40,7 +40,7 @@ def get_login_html_base64():
     로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
     TypeError를 유발하는 Python 포맷팅을 완전히 우회하기 위한 최종 전략입니다.
     """
-    # 템플릿 콘텐츠 (여전히 Raw String + 이중 이스케이프 유지)
+    # 템플릿 콘텐츠 (Raw String + 이중 이스케이프 유지)
     html_content = r"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -105,12 +105,12 @@ def get_base64_decoder_html():
     """
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
+    
+    이 함수는 Python f-string을 사용하여 인코딩된 콘텐츠를 JavaScript 변수에 직접 삽입합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # Python 포맷팅을 완전히 우회하기 위해 JavaScript 코드도 Base64에 포함시킵니다.
-    # 하지만 Streamlit components.html은 기본적으로 HTML을 예상하므로, 
-    # 디코딩 스크립트만 HTML 포맷으로 작성하고 인코딩된 콘텐츠를 변수에 넣습니다.
+    # Python 포맷팅 충돌 가능성을 최소화하기 위해, JavaScript 코드 내부의 중괄호는 {{ }}로 이스케이프 처리합니다.
     decoder_html = f"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -119,12 +119,12 @@ def get_base64_decoder_html():
     <title>Decoder</title>
 </head>
 <body>
-    <div id="decoded-content"></div>
+    <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
-        // 1. Base64로 인코딩된 HTML 콘텐츠
+        // 1. Base64로 인코딩된 HTML 콘텐츠를 Python 변수에서 직접 가져와 JavaScript 변수에 할당
         const encoded = '{encoded_content}';
         
-        // 2. Base64 디코딩 함수
+        // 2. Base64 디코딩 함수 (JavaScript 중괄호를 이스케이프 처리)
         function decodeBase64(base64) {{
             // 브라우저 API를 사용하여 디코딩
             const binary_string = window.atob(base64);
@@ -139,12 +139,14 @@ def get_base64_decoder_html():
         // 3. 디코딩 및 삽입
         try {{
             const decodedHtml = decodeBase64(encoded);
-            document.body.innerHTML = decodedHtml;
+            // document.body 대신 document 전체의 내용을 덮어씁니다.
+            document.open();
+            document.write(decodedHtml);
+            document.close();
         }} catch(e) {{
             // 오류 발생 시 사용자에게 메시지 표시
-            document.body.innerHTML = '<div style="color: red; text-align: center; margin-top: 50px;">' +
-                                      '로그인 페이지 로딩 오류: ' + e.message + 
-                                      '</div>';
+            document.getElementById('loading-message').style.color = 'red';
+            document.getElementById('loading-message').textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
             console.error("Base64 decoding failed:", e);
         }}
     </script>
@@ -595,11 +597,10 @@ def render_login_page():
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
-    # Base64 인코딩 덕분에 이 문자열은 Python 포맷팅으로부터 안전합니다.
     component_value = components.html(
         login_html_content,
-        height=700,
-        scrolling=False,
+        height=600, # 높이를 약간 줄여 컴포넌트 오류 발생 가능성 최소화
+        scrolling=True, # 스크롤링 허용 (안전성 증대)
         key="login_component"
     )
 
