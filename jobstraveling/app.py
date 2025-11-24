@@ -102,7 +102,7 @@ def save_report_to_firestore(report_data):
     return True, ""
 
 
-# --- 2. HTML 파일 로드 함수 ---
+# --- 2. HTML 파일 로드 함수 (수정된 부분) ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
     # ⭐️ 경로 문제 해결을 위해 현재 스크립트의 절대 경로를 기준으로 파일을 찾습니다.
@@ -337,79 +337,85 @@ def render_add_program_page():
 
 def render_add_report_page():
     """
-    HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다. (핵심 수정)
+    HTML 컴포넌트로 폼을 표시하고, Streamlit 버튼으로 저장 처리를 수행합니다.
     """
     st.title("잡스리포트 기록하기 📝")
     
-    # 1. HTML 컴포넌트 렌더링 (폼 입력 및 제출 버튼 담당)
+    # 1. HTML 컴포넌트 렌더링 (폼 입력 담당)
     add_report_html = read_html_file('add_report.html')
     
+    # components.html에는 key 인수를 전달할 수 없습니다. key 인수를 제거합니다.
     component_value = components.html(
         html=add_report_html, 
-        height=700, # 버튼이 포함되었으므로 높이 증가
+        height=650,
         scrolling=True,
     )
 
-    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 처리 (핵심 수정)
-    current_data = None
-    is_submitted = False
-    
+
+    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
+    # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
     # component_value가 딕셔너리 형태이고 'reportData' 키를 포함하는지 확인합니다.
     if isinstance(component_value, dict) and 'reportData' in component_value:
-        current_data = component_value['reportData']
-        # 'submitted' 플래그는 HTML의 버튼 클릭 시에만 True로 설정됩니다.
-        is_submitted = component_value.get('submitted', False)
-
-    # 3. Streamlit 상태 관리 및 저장 로직 (HTML 제출 신호 대기)
+        # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
+        st.session_state.current_report_data = component_value['reportData']
+        # 디버깅을 위해 현재 수신된 데이터를 출력
+        # st.json(st.session_state.current_report_data) 
+    
+    # 3. Streamlit 버튼 배치 (저장 실행 담당)
     st.markdown("---")
-
-    # A) 저장 성공 후 상태
+    
+    # 저장 성공 후 버튼은 숨기고, 성공 메시지를 표시합니다.
     if st.session_state.get('report_saved_successfully', False):
-        # 저장 성공 후 버튼은 숨기고, 성공 메시지를 표시합니다.
+        # 저장 성공 후 활동 선택 버튼 표시
         st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
         
-        # 저장 성공 후 상태 초기화 (다음 리포트 작성을 위해 필요)
-        st.session_state.report_saved_successfully = False 
-        
+        # NOTE: 리포트가 저장된 후에는 폼 데이터를 다시 초기화해야 다음 기록 시 오류가 없습니다.
+        st.session_state.current_report_data = None 
+
         col_view, col_home = st.columns(2)
         with col_view:
             if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
+                st.session_state.report_saved_successfully = False # 상태 초기화
                 navigate(PAGE_VIEW_REPORTS)
         with col_home:
             if st.button("메인 화면으로 돌아가기", key="post_save_home"):
+                st.session_state.report_saved_successfully = False # 상태 초기화
                 navigate(PAGE_HOME)
 
-    # B) 제출 신호 수신 상태 (HTML 버튼 클릭)
-    elif is_submitted:
-        # 필수 필드 체크: programName, experienceDate, rating, reportContent
-        is_valid = (
-            current_data and 
-            current_data.get('programName') and 
-            current_data.get('experienceDate') and 
-            current_data.get('rating') is not None and 
-            current_data.get('reportContent')
-        )
+    else:
+        # 저장 전 상태에서는 Streamlit 버튼을 표시합니다.
+        if st.button("🚀 리포트 저장하기", key="submit_report_to_python", type="primary"):
+            # 버튼 클릭 시 저장 로직 실행
+            
+            # current_report_data를 세션 상태에서 가져옵니다.
+            current_data = st.session_state.get('current_report_data')
+            
+            # 필수 필드 체크: programName, experienceDate, rating, reportContent
+            is_valid = (
+                current_data and 
+                current_data.get('programName') and 
+                current_data.get('experienceDate') and 
+                current_data.get('rating') is not None and 
+                current_data.get('reportContent')
+            )
 
-        if is_valid:
-            
-            # 저장 로직 실행
-            success, message = save_report_to_firestore(current_data)
-            
-            if success:
-                st.session_state.report_saved_successfully = True
-                st.session_state.current_report_data = None # 임시 데이터 초기화
-                st.rerun() # 성공 메시지와 버튼을 표시하기 위해 페이지 새로고침
+            if is_valid:
+                
+                # 저장 로직 실행
+                success, message = save_report_to_firestore(current_data)
+                
+                if success:
+                    st.session_state.report_saved_successfully = True
+                    st.session_state.current_report_data = None # 임시 데이터 초기화
+                    st.rerun() # 성공 메시지와 버튼을 표시하기 위해 페이지 새로고침
+                else:
+                    st.error(f"⚠️ 리포트 저장 실패: {message}")
             else:
-                st.error(f"⚠️ 리포트 저장 실패: {message}")
-        else:
-            # HTML에서 데이터가 넘어왔지만, 필수 필드가 비어있을 때
-            st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
-            # 오류 발생 시 submitted 플래그를 False로 설정하여 다음 렌더링에서 다시 제출 시도 가능하도록 함
-            if component_value:
-                 component_value['submitted'] = False # HTML 컴포넌트의 값을 수정하는 것은 불가하지만, 개념상 오류 처리
-
-    # C) 기본 상태 (제출 신호가 없을 때)
-    # 이 영역에는 별도의 Streamlit 버튼을 배치하지 않습니다.
+                # 데이터가 준비되지 않았을 경우 (HTML에서 데이터가 제대로 안 넘어온 경우)
+                st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
+                # st.json({"Debug: current_data is": current_data}) # 디버깅용
+                # **해결책:** 이 오류가 뜨면 사용자는 폼의 모든 내용을 다시 확인하고,
+                # 폼에서 마우스 클릭이나 키보드 입력을 통해 데이터 전송(JS)을 다시 트리거해야 합니다.
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
