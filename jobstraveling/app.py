@@ -10,6 +10,7 @@ def escape_curly_braces(html_content):
     """
     # 1. 포맷팅 키를 임시 Placeholder로 대체
     placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
+    # Placeholder가 없는 경우를 대비해 안전하게 대체 (로그인 페이지의 경우)
     content = html_content.replace("{streamlit_data_script}", placeholder)
     
     # 2. 모든 일반 중괄호 이스케이프 처리
@@ -92,7 +93,8 @@ def get_login_html_content():
 </body>
 </html>
     """
-    return html
+    # [수정 사항] 로그인 HTML 콘텐츠에도 중괄호 이스케이프 로직 적용
+    return escape_curly_braces(html)
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
@@ -529,7 +531,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # **[수정 사항]** components.html 호출 전에 HTML 콘텐츠를 미리 로드하여 안정성을 높입니다.
+    # components.html 호출 전에 HTML 콘텐츠를 미리 로드하여 안정성을 높입니다.
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
