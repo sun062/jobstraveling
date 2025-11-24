@@ -20,7 +20,7 @@ if 'user_data' not in st.session_state:
 if 'is_auth_ready' not in st.session_state:
     st.session_state.is_auth_ready = False 
 if 'mock_user' not in st.session_state:
-    # 기본 Mock 사용자 정보 설정 (로그인 전 테스트용)
+    # 기본 Mock 사용자 정보 설정 (회원가입 전 기본 로그인 테스트용)
     st.session_state.mock_user = {
         'email': 'test@example.com',
         'password': 'password123',
@@ -50,7 +50,7 @@ def navigate(page):
 # --- 4. 페이지 렌더링 함수 ---
 
 def render_login_page():
-    """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
+    """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (안정적인 로그인 방식)"""
     st.title("로그인")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -58,8 +58,7 @@ def render_login_page():
         with st.form("login_form", clear_on_submit=False):
             st.markdown('<h3 style="text-align: center; color: #3b82f6;">Job-Trekking 로그인</h3>', unsafe_allow_html=True)
             
-            # Mock 계정 노출 제거 (사용자 요청 반영)
-            # st.info(f"💡 **Mock 계정:**\n- **이메일:** `{mock_user['email']}`\n- **비밀번호:** `{mock_user['password']}`")
+            st.info("💡 **팁:** 회원가입 시 입력하신 이메일과 비밀번호로 로그인해 주세요.")
             
             email = st.text_input("이메일 주소", key="login_email")
             password = st.text_input("비밀번호", type="password", key="login_password")
@@ -126,7 +125,7 @@ def render_signup_page():
         submitted = st.form_submit_button("회원가입 완료")
 
         if submitted:
-            # 유효성 검사
+            # 유효성 검사 및 Mock 데이터 저장 로직은 동일합니다.
             if not all([email, password, school_name, class_number, student_name, birth_date]):
                 st.error("모든 필드를 입력해 주세요.")
             elif len(password) < 6:
@@ -134,7 +133,7 @@ def render_signup_page():
             elif birth_date < min_date or birth_date > today:
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
-                # Mock 데이터 저장 (이 정보로 로그인을 시도할 수 있게 됩니다)
+                # Mock 데이터 저장 
                 st.session_state.mock_user = {
                     'email': email,
                     'password': password, 
@@ -155,25 +154,32 @@ def render_signup_page():
 
 def render_home_page():
     """
-    홈 화면을 렌더링합니다. (home.html 사용)
+    홈 화면을 렌더링합니다. (Tailwind CSS 디자인이 적용된 HTML 컴포넌트를 사용하여 형태 복구)
     """
     user_name = "사용자"
-    if st.session_state.user_data and st.session_state.user_data.get('studentName'):
-        user_name = st.session_state.user_data['studentName']
+    user_info = st.session_state.user_data
+    if user_info and user_info.get('studentName'):
+        user_name = user_info['studentName']
         
-    st.title("잡스트레블링 (Job-Trekking) 메인 화면 💼")
-    st.write(f"환영합니다, **{user_name}**님! 아래는 '홈 화면 (업데이트됨)'의 콘텐츠입니다.")
+    # === 요청된 문구 수정 반영: '잡스트레블링 (Job-Trekking) 메인 화면 💼' -> '잡스트레블링 메인 화면 💼'
+    st.title("잡스트레블링 메인 화면 💼")
+    
+    # === 요청된 문구 수정 반영: '홈 화면 (업데이트됨)' -> '홈 화면'
+    st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
     
     # home.html 파일 읽기
     html_content = read_html_file('home.html')
     
     if html_content:
-        # 사용자 이름 등 동적 데이터를 HTML에 주입할 수 있습니다 (현재는 간단히 이름만 대체)
+        # 사용자 이름 등 동적 데이터를 HTML에 주입
+        # 이름 외에 학교, 반 정보도 함께 전달
         html_content = html_content.replace('{{USER_NAME}}', user_name)
+        html_content = html_content.replace('{{USER_SCHOOL}}', user_info.get('schoolName', '학교 정보 없음'))
+        html_content = html_content.replace('{{USER_CLASS}}', user_info.get('classNumber', '반 정보 없음'))
         
         components.html(
             html_content,
-            height=700, # 적절한 높이 설정
+            height=700, # 충분한 높이 확보
             scrolling=True,
         )
     
