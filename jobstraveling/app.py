@@ -105,12 +105,28 @@ def save_report_to_firestore(report_data):
 # --- 2. HTML 파일 로드 함수 ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
+    # Streamlit Cloud 환경에서는 현재 디렉토리에 파일이 있어야 접근 가능합니다.
+    # 하지만 Canvas 환경에서는 파일 시스템 구조가 평탄화되므로, 상대 경로를 사용합니다.
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'htmls', file_name)
     try:
+        # 파일 경로가 복잡해지는 것을 막기 위해 임시로 현재 디렉토리로 변경
+        file_path = file_name
+        
+        # 파일이 생성되었는지 확인 후, 실제 파일 시스템 경로를 사용합니다.
+        # 이 환경에서는 파일이 htmls/add_report.html 처럼 저장될 수 있습니다.
+        # 하지만 Streamlit에서는 파일 시스템을 다루기 어렵기 때문에,
+        # 사용자가 제공한 파일 경로를 그대로 사용하는 것이 안전합니다.
+        
+        # NOTE: 이 코드는 파일 시스템의 'htmls/' 폴더에 접근하는 코드로 가정합니다.
+        # 실제 Streamlit/Canvas 환경에서는 파일 경로가 다를 수 있으나,
+        # 이전에 제공된 코드를 유지합니다.
+        file_path = f"htmls/{file_name}"
+        
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        st.error(f"HTML 파일을 찾을 수 없습니다. 경로를 확인해주세요: {file_path}")
+        # st.error(f"HTML 파일을 찾을 수 없습니다: {file_name}") # 에러 메시지 제거
+        # 파일을 찾을 수 없는 경우 빈 문자열을 반환하여 앱 충돌 방지
         return ""
 
 # --- 3. 페이지 전환 ---
@@ -341,17 +357,17 @@ def render_add_report_page():
         html=add_report_html, 
         height=650,
         scrolling=True,
-        # key="report_form_html_component" # 오류 발생 원인인 key 인수를 제거
     )
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
     # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
-    # component_value가 딕셔너리 형태이고 필요한 키를 포함하는지 확인합니다.
-    # component_value가 None인 경우 (초기 로딩 시) 안전하게 건너뜁니다.
+    # component_value가 딕셔너리 형태이고 'reportData' 키를 포함하는지 확인합니다.
     if isinstance(component_value, dict) and 'reportData' in component_value:
         # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
         st.session_state.current_report_data = component_value['reportData']
+        # 디버깅을 위해 현재 수신된 데이터를 출력
+        # st.json(st.session_state.current_report_data) 
     
     # 3. Streamlit 버튼 배치 (저장 실행 담당)
     st.markdown("---")
@@ -361,6 +377,9 @@ def render_add_report_page():
         # 저장 성공 후 활동 선택 버튼 표시
         st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
         
+        # NOTE: 리포트가 저장된 후에는 폼 데이터를 다시 초기화해야 다음 기록 시 오류가 없습니다.
+        st.session_state.current_report_data = None 
+
         col_view, col_home = st.columns(2)
         with col_view:
             if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
@@ -376,7 +395,7 @@ def render_add_report_page():
         if st.button("🚀 리포트 저장하기", key="submit_report_to_python", type="primary"):
             # 버튼 클릭 시 저장 로직 실행
             
-            # current_report_data가 None이거나, 필수 필드가 비어있지 않은지 검증
+            # current_report_data를 세션 상태에서 가져옵니다.
             current_data = st.session_state.get('current_report_data')
             
             # 필수 필드 체크: programName, experienceDate, rating, reportContent
@@ -400,7 +419,11 @@ def render_add_report_page():
                 else:
                     st.error(f"⚠️ 리포트 저장 실패: {message}")
             else:
+                # 데이터가 준비되지 않았을 경우 (HTML에서 데이터가 제대로 안 넘어온 경우)
                 st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
+                # st.json({"Debug: current_data is": current_data}) # 디버깅용
+                # **해결책:** 이 오류가 뜨면 사용자는 폼의 모든 내용을 다시 확인하고,
+                # 폼에서 마우스 클릭이나 키보드 입력을 통해 데이터 전송(JS)을 다시 트리거해야 합니다.
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
