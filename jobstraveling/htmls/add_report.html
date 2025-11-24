@@ -75,6 +75,7 @@
     <div class="report-container">
         <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">나의 진로 체험 리포트</h2>
         
+        <!-- 메시지 및 성공 후 버튼 영역 -->
         <div id="message-box" class="hidden p-4 mb-4 rounded-lg text-sm" role="alert"></div>
 
         <form id="add-report-form">
@@ -139,11 +140,15 @@
         const form = document.getElementById('add-report-form');
         const submitBtn = document.getElementById('submit-report-btn');
 
-        // 2. 메시지 표시 함수
+        // Streamlit 페이지 이동 함수
+        function navigateTo(page) {
+             window.parent.postMessage({ type: 'streamlit:setComponentValue', value: page }, '*');
+        }
+
+        // 2. 메시지 표시 함수 (이 함수는 성공 후 로직에서 사용되지 않고, 에러 표시용으로 남겨둡니다)
         function showMessage(text, type) {
             messageBox.textContent = text;
             messageBox.className = `p-4 mb-4 rounded-lg text-sm`;
-            // Tailwind 클래스 설정
             if (type === 'success') {
                 messageBox.classList.add('bg-green-100', 'text-green-700', 'block');
             } else if (type === 'error') {
@@ -151,8 +156,6 @@
             } else {
                 messageBox.classList.add('bg-blue-100', 'text-blue-700', 'block');
             }
-            // 5초 후 메시지 숨김
-            setTimeout(() => messageBox.classList.add('hidden'), 5000);
             messageBox.classList.remove('hidden');
         }
 
@@ -189,6 +192,7 @@
 
             submitBtn.disabled = true;
             submitBtn.textContent = '저장 중...';
+            messageBox.classList.add('hidden'); // 기존 메시지 숨기기
             
             // 별점 값 가져오기
             const ratingValue = form.querySelector('input[name="rating"]:checked')?.value;
@@ -218,13 +222,29 @@
             try {
                 // 새로운 문서 추가
                 await addDoc(collection(db, collectionPath), newReport);
-                showMessage('잡스리포트가 성공적으로 저장되었습니다! 🎉', 'success');
-                form.reset(); // 폼 초기화
+                
+                // --- 저장 성공 후 로직 변경 (요청 사항 반영) ---
+                form.style.display = 'none'; // 폼 숨기기
+                submitBtn.disabled = false; // 버튼 상태 해제 (화면 전환용 버튼에 영향 없도록)
+                
+                // 성공 메시지 및 버튼 표시
+                messageBox.className = 'p-6 mb-4 rounded-xl text-lg bg-green-50 text-green-700 block text-center';
+                messageBox.innerHTML = `
+                    <p class="font-bold text-2xl mb-4 text-green-600">저장 완료! 🎉</p>
+                    <p class="mb-6 text-gray-600">리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.</p>
+                    <div class="flex flex-col space-y-3">
+                        <button onclick="navigateTo('view_reports')" class="w-full py-3 bg-indigo-500 text-white font-semibold rounded-lg hover:bg-indigo-600 transition duration-150 shadow-md">
+                            📖 나의 기록 보기
+                        </button>
+                        <button onclick="navigateTo('home')" class="w-full py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition duration-150 shadow-md">
+                            메인 화면으로 돌아가기
+                        </button>
+                    </div>
+                `;
 
             } catch (error) {
                 console.error("리포트 저장 실패:", error);
                 showMessage(`리포트 저장에 실패했습니다: ${error.message}`, 'error');
-            } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = '리포트 저장하기';
             }
