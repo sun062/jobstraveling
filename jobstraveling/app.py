@@ -28,7 +28,7 @@ PAGE_SIGNUP = 'signup'
 PAGE_HOME = 'home'
 PAGE_PROGRAM_LIST = 'program_list' 
 PAGE_ADD_PROGRAM = 'add_program'   
-PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지 (Streamlit 폼으로 변경)
+PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지
 PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지
 
 # 세션 상태 초기화
@@ -61,6 +61,12 @@ if 'mock_user_normal' not in st.session_state:
         'isAdmin': False
     }
 
+# 리포트 폼 데이터를 저장할 세션 상태 (HTML 컴포넌트에서 전달받음)
+if 'current_report_data' not in st.session_state:
+    st.session_state.current_report_data = None
+if 'report_saved_successfully' not in st.session_state:
+    st.session_state.report_saved_successfully = False
+
 # --- Firebase Stubs (Python Backend) ---
 
 def get_current_user_id():
@@ -77,16 +83,22 @@ def save_report_to_firestore(report_data):
     if not user_id:
         return False, "사용자 인증 정보를 찾을 수 없습니다."
 
+    # 필수 필드 유효성 검사
+    if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
+        return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
+    
     # Firestore Data Structure Stub
     if user_id not in st.session_state.firestore_reports:
         st.session_state.firestore_reports[user_id] = []
+    
+    # 날짜 문자열을 Date 객체로 변환하여 저장
+    # 여기서 Firebase에 데이터를 저장하는 로직이 실행됩니다.
     
     report_data['id'] = str(len(st.session_state.firestore_reports[user_id]) + 1) # 임시 ID 부여
     report_data['createdAt'] = datetime.now().isoformat()
     
     st.session_state.firestore_reports[user_id].append(report_data)
     
-    st.success("✅ 리포트가 성공적으로 저장되었습니다.")
     return True, ""
 
 
@@ -110,7 +122,6 @@ def navigate(page):
 # --- 4. 페이지 렌더링 함수 ---
 
 # (render_login_page, render_signup_page, render_home_page, render_program_list_page, render_add_program_page는 변경 없음)
-
 def render_login_page():
     """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("로그인")
@@ -319,69 +330,36 @@ def render_add_program_page():
 
 def render_add_report_page():
     """
-    사용자가 직업 체험 후기 (잡스리포트)를 기록하는 페이지를 렌더링합니다.
-    HTML 컴포넌트 대신 Streamlit 네이티브 폼을 사용하여 안정성을 높였습니다.
+    HTML 컴포넌트로 폼을 표시하고, Streamlit 버튼으로 저장 처리를 수행합니다.
     """
     st.title("잡스리포트 기록하기 📝")
-    st.info("체험한 내용을 기록하고 별점 평가를 남겨주세요. 리포트는 개인 기록으로 저장됩니다.")
     
-    # 별점 선택을 위한 Helper 함수
-    def get_rating_stars(rating):
-        return "★" * rating + "☆" * (5 - rating)
-
-    with st.form("add_report_form", clear_on_submit=True):
-        
-        st.markdown("### 1. 체험 정보")
-        program_name = st.text_input("체험 프로그램/기관명", key="report_program_name", placeholder="예: 구글 코리아 견학, IT 개발자 직무 체험")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            experience_date = st.date_input("체험 일자", key="report_experience_date", max_value=date.today())
-        with col2:
-            job_field = st.text_input("직무/분야", key="report_job_field", placeholder="예: 소프트웨어 엔지니어, 마케팅")
-
-        st.markdown("---")
-        st.markdown("### 2. 체험 만족도")
-        # Streamlit 슬라이더를 사용하여 별점 입력 받기
-        rating = st.slider("별점 (5점 만점)", min_value=1, max_value=5, value=5, step=1, key="report_rating", 
-                            format=f"%d점 ({get_rating_stars(st.session_state.report_rating)})")
-
-        st.markdown("---")
-        st.markdown("### 3. 상세 기록")
-        report_content = st.text_area("체험 내용 및 소감", key="report_content", height=200, 
-                                      placeholder="체험에서 배운 점, 느낀 점, 좋았던 점, 아쉬웠던 점 등을 상세하게 기록해 주세요. (최소 100자 권장)")
-        
-        submitted = st.form_submit_button("리포트 저장하기")
-
-        if submitted:
-            # 필수 필드 유효성 검사
-            if not program_name or not experience_date or not report_content:
-                st.error("⚠️ 체험 프로그램명, 체험 일자, 소감 내용을 모두 입력해 주세요.")
-                return
-
-            # 데이터 저장
-            report_data = {
-                'programName': program_name,
-                'experienceDate': experience_date.strftime("%Y-%m-%d"),
-                'jobField': job_field,
-                'rating': rating,
-                'reportContent': report_content,
-            }
-
-            # Python 백엔드에서 데이터 저장 시뮬레이션
-            success, message = save_report_to_firestore(report_data)
-
-            if success:
-                # 저장 성공 후 다음 활동 선택 화면 (요청 사항)
-                st.session_state.report_saved_successfully = True
-                st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
-                st.markdown("---")
-            else:
-                st.error(f"저장 실패: {message}")
+    # 1. HTML 컴포넌트 렌더링 (폼 입력 담당)
+    add_report_html = read_html_file('add_report.html')
     
-    # 저장 성공 후 활동 선택 버튼 표시
+    # HTML 컴포넌트 렌더링 및 JavaScript 데이터 수신을 위한 키 설정
+    component_value = components.html(
+        add_report_html,
+        height=650,
+        scrolling=True,
+        key="report_form_html_component"
+    )
+
+    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
+    report_data_from_html = None
+    if component_value and isinstance(component_value, dict) and 'reportData' in component_value:
+        report_data_from_html = component_value['reportData']
+        # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
+        st.session_state.current_report_data = report_data_from_html
+        
+    # 3. Streamlit 버튼 배치 (저장 실행 담당)
+    st.markdown("---")
+    
+    # 저장 성공 후 버튼은 숨기고, 성공 메시지를 표시합니다.
     if st.session_state.get('report_saved_successfully', False):
-        st.markdown("<div class='flex flex-col space-y-3 mt-4'>", unsafe_allow_html=True)
+        # 저장 성공 후 활동 선택 버튼 표시
+        st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
+        
         col_view, col_home = st.columns(2)
         with col_view:
             if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
@@ -391,7 +369,24 @@ def render_add_report_page():
             if st.button("메인 화면으로 돌아가기", key="post_save_home"):
                 st.session_state.report_saved_successfully = False # 상태 초기화
                 navigate(PAGE_HOME)
-        st.markdown("</div>", unsafe_allow_html=True)
+
+    else:
+        # 저장 전 상태에서는 Streamlit 버튼을 표시합니다.
+        if st.button("🚀 리포트 저장하기", key="submit_report_to_python", type="primary"):
+            # 버튼 클릭 시 저장 로직 실행
+            if st.session_state.current_report_data:
+                
+                # 저장 로직 실행
+                success, message = save_report_to_firestore(st.session_state.current_report_data)
+                
+                if success:
+                    st.session_state.report_saved_successfully = True
+                    st.session_state.current_report_data = None # 임시 데이터 초기화
+                    st.rerun() # 성공 메시지와 버튼을 표시하기 위해 페이지 새로고침
+                else:
+                    st.error(f"⚠️ 리포트 저장 실패: {message}")
+            else:
+                st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목을 입력했는지 확인해 주세요.")
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
