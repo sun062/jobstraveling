@@ -91,9 +91,8 @@ def get_base64_decoder_html():
     """
     encoded_content = get_login_html_base64()
     
-    # Base64 데이터를 삽입할 포맷팅 키 {encoded_base64_data}만 남기고,
-    # 모든 JS 중괄호를 이스케이프 처리하기 위한 템플릿
-    decoder_template = """
+    # 템플릿 (Raw String)
+    decoder_template = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -136,10 +135,10 @@ def get_base64_decoder_html():
 </html>
 """
     
-    # --- 근본적인 해결책: 프로그램 이스케이프 로직 ---
-    placeholder = "__ENCODED_DATA_PLACEHOLDER__"
+    # --- 근본적인 해결책: 프로그램 이스케이프 로직 강화 ---
     
     # 1. 포맷팅 키를 임시 Placeholder로 대체
+    placeholder = "__ENCODED_DATA_PLACEHOLDER__"
     escaped_template = decoder_template.replace("{encoded_base64_data}", placeholder)
     
     # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
@@ -147,6 +146,7 @@ def get_base64_decoder_html():
     escaped_template = escaped_template.replace("{", "{{").replace("}", "}}")
     
     # 3. Placeholder를 포맷팅 키로 다시 복원
+    # 이 부분이 Streamlit의 `components.html`에 의해 안전하게 처리되어야 하는 유일한 포맷팅 필드입니다.
     final_template = escaped_template.replace(placeholder, "{encoded_base64_data}")
 
     # 4. 최종적으로 Base64 데이터 삽입 후 반환
@@ -584,16 +584,16 @@ def get_base_html_content():
     
     # --- 근본적인 해결책: 프로그램 이스케이프 로직 적용 ---
     
-    # 템플릿의 포맷팅 키를 임시 Placeholder로 대체
+    # 1. 템플릿의 포맷팅 키를 임시 Placeholder로 대체
     placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
     content = html.replace("{streamlit_data_script}", placeholder)
     
-    # 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
+    # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
     content = content.replace("{", "{{").replace("}", "}}")
     
-    # Placeholder를 포맷팅 키로 다시 복원
-    # Streamlit이 이 위치에만 데이터를 삽입할 수 있도록 합니다.
-    return content.replace(placeholder, "{streamlit_data_script}")
+    # 3. Placeholder를 포맷팅 키로 다시 복원
+    final_template = content.replace(placeholder, "{streamlit_data_script}")
+    return final_template
 
 
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
@@ -623,6 +623,7 @@ def render_home_page():
     
     # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
+        # get_base_html_content()는 이미 JS 중괄호가 이스케이프된 템플릿을 반환합니다.
         st.session_state['base_html'] = get_base_html_content()
         
     base_html_template = st.session_state['base_html'] 
