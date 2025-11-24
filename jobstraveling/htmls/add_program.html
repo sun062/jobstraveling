@@ -3,203 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로그램 추가</title>
+    <title>새 진로 프로그램 등록</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: white; }
-        .form-input, .form-select { /* Select 필드 스타일 추가 */
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            transition: border-color 0.2s;
-            background-color: white; /* 드롭다운 배경색 */
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
+        .form-container { max-width: 800px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .input-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; }
+        .input-group input, .input-group select, .input-group textarea {
+            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; transition: border-color 0.3s;
         }
-        .form-input:focus, .form-select:focus {
-            border-color: #3b82f6;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-        .submit-btn {
-            background-color: #3b82f6;
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-        }
-        .submit-btn:hover {
-            background-color: #2563eb;
-        }
+        .input-group input:focus, .input-group select:focus, .input-group textarea:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
+        .required::after { content: '*'; color: #ef4444; margin-left: 4px; }
     </style>
+    <!-- Streamlit Component API 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@streamlit/lib@0.2.3/dist/streamlit-component-lib.js"></script>
 </head>
-<body class="p-6">
-
-    <div id="message-box" class="hidden p-4 mb-4 rounded-lg text-sm" role="alert"></div>
-
-    <form id="add-program-form" class="max-w-xl mx-auto p-6 bg-white rounded-xl shadow-lg">
-        
-        <label class="block text-gray-700 font-semibold">프로그램 제목</label>
-        <input type="text" id="title" class="form-input" required placeholder="예: 2024 AI 부트캠프"/>
-
-        <label class="block text-gray-700 font-semibold">웹사이트 URL (클릭 시 이동할 주소)</label>
-        <input type="url" id="websiteUrl" class="form-input" required placeholder="예: https://www.program-site.com"/>
-
-        <label class="block text-gray-700 font-semibold">간단 설명</label>
-        <textarea id="description" class="form-input" rows="3" required placeholder="프로그램의 핵심 내용을 요약하여 작성해 주세요."></textarea>
-        
-        <div class="grid grid-cols-2 gap-4">
-            <!-- 분류/카테고리 (드롭다운으로 변경) -->
-            <div>
-                <label class="block text-gray-700 font-semibold">분류/카테고리</label>
-                <select id="category" class="form-select" required>
-                    <option value="" disabled selected>-- 선택하세요 --</option>
-                    <option value="IT/소프트웨어">IT/소프트웨어</option>
-                    <option value="과학/공학">과학/공학</option>
-                    <option value="예술/디자인">예술/디자인</option>
-                    <option value="인문/사회">인문/사회</option>
-                    <option value="경영/경제">경영/경제</option>
-                    <option value="교육/의료">교육/의료</option>
-                    <option value="기타">기타</option>
-                </select>
-            </div>
-            <!-- 지역 (드롭다운으로 변경) -->
-            <div>
-                <label class="block text-gray-700 font-semibold">지역</label>
-                <select id="region" class="form-select" required>
-                    <option value="" disabled selected>-- 선택하세요 --</option>
-                    <option value="전국">전국</option>
-                    <option value="서울">서울</option>
-                    <option value="경기">경기</option>
-                    <option value="인천">인천</option>
-                    <option value="부산">부산</option>
-                    <option value="대구">대구</option>
-                    <option value="광주">광주</option>
-                    <option value="대전">대전</option>
-                    <option value="울산">울산</option>
-                    <option value="세종">세종</option>
-                    <option value="강원">강원</option>
-                    <option value="충북">충북</option>
-                    <option value="충남">충남</option>
-                    <option value="전북">전북</option>
-                    <option value="전남">전남</option>
-                    <option value="경북">경북</option>
-                    <option value="경남">경남</option>
-                    <option value="제주">제주</option>
-                </select>
-            </div>
-        </div>
-
-        <button type="submit" id="submit-btn" class="submit-btn w-full mt-4">프로그램 등록</button>
-    </form>
-    
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // 1. Streamlit Python에서 주입된 변수 사용
-        const firebaseConfig = JSON.parse('{{FIREBASE_CONFIG}}');
-        const initialAuthToken = '{{INITIAL_AUTH_TOKEN}}';
-        const appId = '{{APP_ID}}';
-
-        let app, db, auth;
-        const messageBox = document.getElementById('message-box');
-        const form = document.getElementById('add-program-form');
-        const submitBtn = document.getElementById('submit-btn');
-
-        // 2. 메시지 표시 함수
-        function showMessage(text, type) {
-            messageBox.textContent = text;
-            messageBox.className = `p-4 mb-4 rounded-lg text-sm`;
-            if (type === 'success') {
-                messageBox.classList.add('bg-green-100', 'text-green-700', 'block');
-            } else if (type === 'error') {
-                messageBox.classList.add('bg-red-100', 'text-red-700', 'block');
-            } else {
-                messageBox.classList.add('bg-blue-100', 'text-blue-700', 'block');
-            }
-            setTimeout(() => messageBox.classList.add('hidden'), 5000);
-        }
-
-        // 3. Firebase 초기화 및 인증
-        async function initializeFirebase() {
-            try {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+<body>
+    <div class="form-container">
+        <!-- oninput 이벤트로 데이터가 변경될 때마다 Streamlit으로 전송 -->
+        <form id="program-form" oninput="sendDataToStreamlit()" onsubmit="event.preventDefault(); return false;">
+            <div class="space-y-6">
                 
-                console.log("Admin logged in successfully.");
+                <!-- 프로그램명 (필수) -->
+                <div class="input-group">
+                    <label for="title" class="required">프로그램명</label>
+                    <input type="text" id="title" placeholder="예: 구글 개발자 캠프" required>
+                </div>
 
-            } catch (error) {
-                console.error("Firebase 초기화 또는 인증 실패:", error);
-                showMessage(`시스템 오류: ${error.message}`, 'error');
+                <!-- 직업 분야 (필수) -->
+                <div class="input-group">
+                    <label for="field" class="required">관련 직업/분야</label>
+                    <input type="text" id="field" placeholder="예: IT/개발, 환경 과학, 디자인" required>
+                </div>
+
+                <!-- 위치 및 주최 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="input-group">
+                        <label for="location" class="required">장소/진행 방식</label>
+                        <input type="text" id="location" placeholder="예: 서울 코엑스, 온라인, 전국" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="host" class="required">주최/운영 기관</label>
+                        <input type="text" id="host" placeholder="예: 교육부, 삼성전자, 청소년재단" required>
+                    </div>
+                </div>
+
+                <!-- 모집 상태 (필수) -->
+                <div class="input-group">
+                    <label for="status" class="required">현재 모집 상태</label>
+                    <select id="status" required>
+                        <option value="">선택하세요</option>
+                        <option value="모집 중">모집 중</option>
+                        <option value="모집 예정">모집 예정</option>
+                        <option value="모집 마감">모집 마감</option>
+                        <option value="종료">종료</option>
+                    </select>
+                </div>
+
+                <!-- 상세 설명 -->
+                <div class="input-group">
+                    <label for="description">상세 설명</label>
+                    <textarea id="description" rows="5" placeholder="프로그램의 목표, 주요 내용, 대상 등을 자세히 설명해 주세요."></textarea>
+                </div>
+                
+                <!-- 참고 링크 -->
+                <div class="input-group">
+                    <label for="link">참고 링크 (선택)</label>
+                    <input type="url" id="link" placeholder="예: https://program.com/detail">
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        /**
+         * 폼 데이터를 수집하고 Streamlit Python으로 전송하는 함수
+         */
+        function sendDataToStreamlit() {
+            if (typeof Streamlit === 'undefined') {
+                console.error("Streamlit is not defined. Skipping data send.");
+                return;
             }
+
+            // 1. 데이터 수집
+            const programData = {
+                title: document.getElementById('title').value.trim(),
+                field: document.getElementById('field').value.trim(),
+                location: document.getElementById('location').value.trim(),
+                host: document.getElementById('host').value.trim(),
+                status: document.getElementById('status').value,
+                description: document.getElementById('description').value.trim(),
+                link: document.getElementById('link').value.trim(),
+            };
+
+            // 2. Streamlit Python 컴포넌트로 데이터 전송
+            // 모든 필수 항목이 채워지지 않았더라도, 현재의 모든 데이터를 전송하여
+            // Python 측에서 항상 최신(채워진) 데이터를 받을 수 있도록 합니다.
+            Streamlit.setComponentValue({ 
+                programData: programData
+            });
+            
+            Streamlit.setFrameHeight();
         }
 
-        // 4. 폼 제출 핸들러
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            if (!db) {
-                showMessage('데이터베이스가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.', 'error');
-                return;
-            }
+        /**
+         * Streamlit 객체가 로드될 때까지 기다렸다가 sendDataToStreamlit을 호출하는 함수
+         */
+        function initializeComponent() {
+            const checkStreamlit = setInterval(() => {
+                if (typeof Streamlit !== 'undefined') {
+                    clearInterval(checkStreamlit);
+                    
+                    // 컴포넌트 초기화 완료 후, 초기 값을 Python으로 한 번 전송 (필수)
+                    sendDataToStreamlit(); 
+                }
+            }, 50); // 50ms 간격으로 확인
+        }
 
-            submitBtn.disabled = true;
-            submitBtn.textContent = '등록 중...';
-            
-            const selectedCategory = document.getElementById('category').value;
-            const selectedRegion = document.getElementById('region').value;
-
-            if (!selectedCategory || !selectedRegion) {
-                showMessage('분류/카테고리와 지역을 선택해 주세요.', 'error');
-                submitBtn.disabled = false;
-                submitBtn.textContent = '프로그램 등록';
-                return;
-            }
-
-            const newProgram = {
-                title: document.getElementById('title').value,
-                websiteUrl: document.getElementById('websiteUrl').value,
-                description: document.getElementById('description').value,
-                category: selectedCategory, // 드롭다운 값 사용
-                region: selectedRegion,     // 드롭다운 값 사용
-                createdAt: new Date().toISOString(),
-                registeredBy: auth.currentUser ? auth.currentUser.uid : 'admin_unknown' 
-            };
-            
-            // 데이터베이스 경로: /artifacts/{appId}/public/data/programs
-            const collectionPath = `/artifacts/${appId}/public/data/programs`;
-
-            try {
-                await addDoc(collection(db, collectionPath), newProgram);
-                showMessage('프로그램이 성공적으로 등록되었습니다!', 'success');
-                form.reset(); // 폼 초기화
-
-            } catch (error) {
-                console.error("프로그램 등록 실패:", error);
-                showMessage(`프로그램 등록에 실패했습니다: ${error.message}`, 'error');
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '프로그램 등록';
-            }
-        });
-
-        // 5. 페이지 로드 시 초기화
-        window.onload = initializeFirebase;
+        // 3. 페이지 로드 완료 시 컴포넌트 초기화 시작
+        window.onload = initializeComponent;
     </script>
 </body>
 </html>
