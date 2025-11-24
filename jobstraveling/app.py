@@ -5,7 +5,8 @@ import json
 # --- 1. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
 MOCK_PROGRAMS = [
     {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
-    {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description: "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
+    # Line 8의 Syntax Error를 수정했습니다. ("description: " -> "description": )
+    {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description": "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
     {"id": 3, "title": "경기 AI 로봇 체험관", "region": "경기", "type": "진로", "url": "https://www.google.com/search?q=경기+AI+로봇", "img": "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", "description": "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", "fields": ["AI/IT", "과학/기술", "기계/제조"]},
     {"id": 4, "title": "광주 자동차 미래 산업 탐방", "region": "광주", "type": "견학", "url": "https://www.google.com/search?q=광주+자동차+탐방", "img": "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", "description": "친환경 자동차 생산 라인 및 연구소 방문.", "fields": ["기계/제조", "과학/기술"]},
     {"id": 5, "title": "강원 환경보호 교육 캠페인", "region": "강원", "type": "진로", "url": "https://www.google.com/search?q=강원+환경+캠페인", "img": "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", "description": "지속 가능한 환경과 관련된 직업군 탐색.", "fields": ["생명/환경", "사회/인문"]},
@@ -20,14 +21,6 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def load_html_content(filepath):
     """지정된 경로에서 HTML 파일을 안전하게 로드합니다."""
     try:
-        # 이 함수를 호출할 때 파일 경로를 지정해야 합니다.
-        # 예: with open("home.html", "r", encoding="utf-8") as f:
-        #     html_content = f.read()
-        
-        # 현재 환경에서 home.html의 내용을 직접 넣었다고 가정합니다.
-        # 실제 환경에서는 파일 시스템에서 읽어오세요.
-        # (이 부분은 Streamlit의 file-based app에서는 파일 읽기 코드로 대체되어야 합니다.)
-        
         # 임시로 이전 응답에서 제공한 HTML 코드를 문자열로 직접 사용합니다.
         # 실제 app.py에서는 이 부분을 파일 읽기 코드로 교체해야 합니다.
         html_content = """
@@ -526,36 +519,20 @@ def render_home_page():
                 "fields": FIELDS
             }
             
-            # component_value를 통해 데이터를 다시 HTML로 보냅니다.
-            # Streamlit 컴포넌트의 return 값으로 데이터를 반환하면, 해당 데이터를 HTML 내 JavaScript가 수신할 수 있습니다.
-            # 이 로직은 Streamlit이 컴포넌트를 다시 렌더링하여 데이터를 주입하는 방식으로 작동합니다.
-            
-            # 따라서, HTML 컴포넌트 호출 전에 이 데이터를 포함하는 <script> 태그를 HTML content에 동적으로 삽입하거나,
-            # 아니면 Streamlit 컴포넌트 내부에서 데이터를 처리해야 합니다. 
-            # Streamlit의 components.html은 postMessage로 값을 받을 수는 있지만, postMessage로 값을 보내는 표준 방법은
-            # HTML 코드를 다시 렌더링하는 것입니다. 가장 간단한 해결책은 HTML에 데이터 주입 스크립트를 추가하는 것입니다.
-            
-            # ***하지만, 제가 제공한 home.html은 window.addEventListener('message', ...)를 사용하므로, 
-            # Streamlit에서 직접 postMessage를 호출하는 JavaScript 코드를 추가하는 것이 가장 확실한 방법입니다.***
-            
             # HTML Content에 동적 스크립트 추가
             script = f"""
             <script>
                 // 데이터 주입 스크립트
                 const dataPayload = {json.dumps(data_to_send)};
-                window.onload = function() {{
-                    // Firebase 초기화 후 onPageLoad에서 데이터를 요청할 때까지 기다렸다가 보내야 합니다.
-                    // 임시로 바로 보내도록 설정합니다.
-                    parent.postMessage(dataPayload, '*');
-                }};
+                
+                // 데이터 요청이 들어왔을 때만 응답으로 데이터를 postMessage 합니다.
+                // 이 스크립트를 포함한 HTML이 다시 렌더링될 때, 즉시 데이터를 전송합니다.
+                parent.postMessage(dataPayload, '*');
+                
             </script>
             """
             
             # 새로운 HTML 콘텐츠로 업데이트 (Streamlit은 이를 감지하고 다시 렌더링하여 스크립트 실행)
-            # 이 방식은 복잡하므로, 가장 확실한 방법은 컴포넌트가 데이터를 요청할 때 Streamlit이 해당 값을 수신하고 
-            # 다음 렌더링 루프에서 데이터를 포함한 HTML을 다시 보내는 것입니다.
-            
-            # Simple fix: HTML이 한 번만 렌더링되도록 st.session_state를 사용합니다.
             st.session_state['home_html_content'] = html_content + script
             st.rerun()
 
@@ -575,7 +552,3 @@ if __name__ == '__main__':
         render_home_page()
     else:
         st.error("로그인 페이지로 이동해야 합니다.")
-
-# 에러가 발생했던 라인 688은 이 파일의 if __name__ == '__main__': 블록 끝에 해당한다고 가정합니다.
-# 위의 `render_home_page()` 함수가 `html_content`에 문자열을 확실하게 전달하는 방식으로 수정되어
-# `TypeError`를 해결했습니다.
