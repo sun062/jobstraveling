@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
-# --- 0. 이스케이프 유틸리티 함수 (KeyError 방지 - Base HTML 전용) ---
+# --- 0. 이스케이프 유틸리티 함수 (Base HTML 전용) ---
 def escape_curly_braces(html_content):
     """
     Base HTML에만 적용되며, {streamlit_data_script}를 제외한 모든 중괄호를 이스케이프 처리합니다.
@@ -36,9 +36,10 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def get_login_html_content():
     """
     로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다. 
-    Python의 포맷팅 충돌을 피하기 위해 CSS와 JS의 중괄호가 수동으로 이스케이프 처리되었습니다.
+    Python 포맷팅 충돌을 피하기 위해 Raw String(r'''...''')과 수동 이스케이프를 사용합니다.
     """
-    html = """
+    # Raw String으로 정의하여 파이썬의 포맷팅 시도를 차단합니다.
+    html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -94,12 +95,12 @@ def get_login_html_content():
 </body>
 </html>
     """
-    # [수정 사항] 이 HTML은 이미 수동으로 이스케이프되었으므로, 자동 이스케이프 함수를 호출하지 않습니다.
     return html
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
     """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함합니다."""
+    # Base HTML은 동적 스크립트 삽입이 필요하므로 일반 문자열과 자동 이스케이프 함수를 유지합니다.
     html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -533,7 +534,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # 수동 이스케이프된 로그인 HTML 콘텐츠를 직접 가져옵니다.
+    # 수동 이스케이프 및 Raw String 처리된 로그인 HTML 콘텐츠를 직접 가져옵니다.
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
