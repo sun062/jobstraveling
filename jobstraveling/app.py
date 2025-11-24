@@ -19,7 +19,8 @@ PAGE_SIGNUP = 'signup'
 PAGE_HOME = 'home'
 PAGE_PROGRAM_LIST = 'program_list' 
 PAGE_ADD_PROGRAM = 'add_program'   
-PAGE_ADD_REPORT = 'add_report' # 잡스리포트 페이지 상수
+PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지
+PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지 (신규)
 
 # 세션 상태 초기화
 if 'current_page' not in st.session_state:
@@ -182,17 +183,22 @@ def render_home_page():
     user_name = user_info.get('studentName', '사용자')
     is_admin = user_info.get('isAdmin', False)
 
-    # 1. 제목과 '잡스리포트 기록하기' 버튼을 나란히 배치 (요청 사항)
-    col_title, col_button = st.columns([4, 1])
+    # 1. 제목과 '잡스리포트 기록하기', '나의 기록 보기' 버튼을 나란히 배치 (요청 사항)
+    col_title, col_button_add, col_button_view = st.columns([3, 1, 1])
 
     with col_title:
         st.title("🗺️ Job-Trekking 홈 💼")
     
-    with col_button:
+    with col_button_add:
         # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
         st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
         if st.button("📝 잡스리포트 기록하기", key="navigate_to_report_from_home"):
-            navigate(PAGE_ADD_REPORT) # 잡스리포트 페이지로 이동
+            navigate(PAGE_ADD_REPORT) 
+
+    with col_button_view: 
+        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
+        if st.button("📖 나의 기록 보기", key="navigate_to_view_reports_from_home"):
+            navigate(PAGE_VIEW_REPORTS) # 나의 기록 보기 페이지로 이동
 
     st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
     
@@ -202,8 +208,6 @@ def render_home_page():
             navigate(PAGE_ADD_PROGRAM)
 
     # home.html 파일 읽기
-    # NOTE: 사용자가 이 HTML 파일 내용을 '홈 화면 (업데이트됨)'으로 변경했을 수 있지만, 
-    # 파일명은 변경하지 않은 것으로 가정하고 로드합니다.
     html_content = read_html_file('home.html')
     
     if html_content:
@@ -273,7 +277,6 @@ def render_add_program_page():
     if st.button("프로그램 목록 보기", key="back_to_list_from_add"):
         navigate(PAGE_PROGRAM_LIST)
 
-# --- 신규 페이지 함수 (잡스리포트 기록) ---
 def render_add_report_page():
     """사용자가 직업 체험 후기 (잡스리포트)를 기록하는 페이지를 렌더링합니다."""
     st.title("잡스리포트 기록하기 📝")
@@ -294,7 +297,29 @@ def render_add_report_page():
         )
 
     st.markdown("---")
-    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report"):
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
+        navigate(PAGE_HOME)
+
+def render_view_reports_page():
+    """사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다. (신규)"""
+    st.title("나의 진로 체험 기록 📖")
+    st.info("이 페이지에서는 지금까지 작성한 잡스리포트 목록을 볼 수 있습니다. (개인 기록)")
+
+    view_reports_html = read_html_file('view_reports.html')
+
+    if view_reports_html:
+        view_reports_html = view_reports_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
+        view_reports_html = view_reports_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
+        view_reports_html = view_reports_html.replace('{{APP_ID}}', appId)
+
+        components.html(
+            view_reports_html,
+            height=800,
+            scrolling=True,
+        )
+
+    st.markdown("---")
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_view_reports"):
         navigate(PAGE_HOME)
 
 
@@ -312,8 +337,10 @@ elif st.session_state.current_page == PAGE_PROGRAM_LIST and current_user_authent
     render_program_list_page()
 elif st.session_state.current_page == PAGE_ADD_PROGRAM and current_user_authenticated:
     render_add_program_page()
-elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated: # 신규 페이지 처리
+elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated:
     render_add_report_page()
+elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated: # 신규 페이지 처리
+    render_view_reports_page()
 else:
     # 인증되지 않은 상태에서 접근 시 로그인 페이지로 리다이렉션
     st.session_state.current_page = PAGE_LOGIN
