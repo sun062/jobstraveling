@@ -165,7 +165,7 @@ def render_home_page():
     st.title("잡스트레블링 메인 화면 💼")
     
     # === 요청된 문구 수정 반영: '홈 화면 (업데이트됨)' -> '홈 화면'
-    st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
+    st.write(f"환영합니다, **{user_name}**님! 아래는 '홈 화면'의 콘텐츠입니다.")
     
     # home.html 파일 읽기
     html_content = read_html_file('home.html')
@@ -204,3 +204,4 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+
