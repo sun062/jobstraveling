@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>나의 잡스리포트 기록</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .report-item {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            border-left: 5px solid transparent;
+        }
+        .report-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5; /* Indigo-600 */
+        }
+        .report-item.selected {
+            border-left-color: #10b981; /* Emerald-500 */
+            background-color: #ecfdf5;
+        }
+        .detail-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div id="loading-message" class="text-center text-indigo-500 font-semibold mt-10">데이터를 불러오는 중입니다...</div>
+        <div id="no-reports" class="hidden text-center text-gray-500 p-10 bg-white rounded-xl shadow-lg border border-dashed border-gray-300 mt-10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <h3 class="mt-2 text-lg font-medium text-gray-900">작성된 리포트가 없습니다</h3>
+            <p class="mt-1 text-sm text-gray-500">지금 바로 잡스리포트를 작성해 보세요!</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+            
+            <!-- 리포트 목록 (왼쪽 1/3) -->
+            <div class="lg:col-span-1 space-y-4" id="report-list-container">
+                <h3 class="text-xl font-bold text-gray-700 mb-2">나의 리포트 목록 (총 <span id="report-count" class="text-indigo-600">0</span>건)</h3>
+                <div id="report-list" class="space-y-3">
+                    <!-- 리포트 항목이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+
+            <!-- 상세 리포트 뷰 (오른쪽 2/3) -->
+            <div class="lg:col-span-2">
+                <div id="report-detail-view" class="detail-card hidden">
+                    <h3 class="text-2xl font-extrabold text-indigo-700 mb-4 border-b pb-2">
+                        <span id="detail-programName-title">상세 리포트 보기</span>
+                    </h3>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4 text-gray-600">
+                        <p class="font-medium">체험 일자: <span id="detail-experienceDate" class="text-gray-800 font-semibold"></span></p>
+                        <p class="font-medium">분야: <span id="detail-jobField" class="text-gray-800 font-semibold"></span></p>
+                    </div>
+
+                    <div class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                        <p class="text-lg font-bold text-gray-700 mb-2">체험 만족도</p>
+                        <div id="detail-rating" class="text-4xl text-amber-400"></div>
+                    </div>
+
+                    <div class="p-4 bg-gray-50 rounded-lg border">
+                        <p class="text-lg font-bold text-gray-700 mb-2">소감 및 내용</p>
+                        <p id="detail-reportContent" class="text-gray-700 whitespace-pre-wrap leading-relaxed"></p>
+                    </div>
+                    
+                    <!-- 현재는 읽기 전용이지만, 추후 편집 기능을 위한 버튼 placeholder -->
+                    <!-- <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">리포트 삭제</button> -->
+                </div>
+                <div id="select-tip" class="p-10 detail-card text-center text-gray-500">
+                    왼쪽 목록에서 리포트를 선택해 주세요.
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, where, onSnapshot, getDocs, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. Streamlit Python에서 주입된 변수 사용
+        const firebaseConfig = JSON.parse('{{FIREBASE_CONFIG}}');
+        const initialAuthToken = '{{INITIAL_AUTH_TOKEN}}';
+        const appId = '{{APP_ID}}';
+
+        let app, db, auth, userId = null;
+
+        const loadingMessage = document.getElementById('loading-message');
+        const noReportsMessage = document.getElementById('no-reports');
+        const reportList = document.getElementById('report-list');
+        const reportCount = document.getElementById('report-count');
+        const detailView = document.getElementById('report-detail-view');
+        const selectTip = document.getElementById('select-tip');
+
+        // 2. Firebase 초기화 및 인증
+        function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        // 인증 완료 후 데이터 로드 시작
+                        loadReports(userId);
+                    } else {
+                        // 익명 인증 시도 (Canvas 환경 변수 사용)
+                        if (initialAuthToken) {
+                            signInWithCustomToken(auth, initialAuthToken).catch(e => {
+                                console.error("Custom token sign-in failed. Attempting anonymous.", e);
+                                signInAnonymously(auth).then(u => {
+                                    userId = u.user.uid;
+                                    loadReports(userId);
+                                }).catch(err => console.error("Anonymous sign-in failed:", err));
+                            });
+                        } else {
+                            signInAnonymously(auth).then(u => {
+                                userId = u.user.uid;
+                                loadReports(userId);
+                            }).catch(err => {
+                                console.error("Anonymous sign-in failed:", err);
+                                loadingMessage.textContent = "인증 실패: 사용자 데이터를 불러올 수 없습니다.";
+                                loadingMessage.classList.add('text-red-500');
+                            });
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase 초기화 또는 인증 실패:", error);
+                loadingMessage.textContent = `시스템 오류: ${error.message}`;
+                loadingMessage.classList.add('text-red-500');
+            }
+        }
+        
+        // 3. 별점 렌더링 함수
+        function renderRating(rating) {
+            let stars = '';
+            for (let i = 0; i < 5; i++) {
+                stars += `<span class="align-middle">${i < rating ? '★' : '☆'}</span>`;
+            }
+            return stars;
+        }
+
+        // 4. 리포트 상세 보기 함수
+        function showReportDetail(report, docId) {
+            // 모든 항목의 selected 클래스 제거
+            document.querySelectorAll('.report-item').forEach(item => item.classList.remove('selected'));
+            // 현재 클릭된 항목에 selected 클래스 추가
+            document.getElementById(`report-${docId}`).classList.add('selected');
+
+            document.getElementById('detail-programName-title').textContent = report.programName;
+            document.getElementById('detail-experienceDate').textContent = report.experienceDate;
+            document.getElementById('detail-jobField').textContent = report.jobField;
+            document.getElementById('detail-rating').innerHTML = renderRating(report.rating);
+            document.getElementById('detail-reportContent').textContent = report.reportContent;
+
+            selectTip.classList.add('hidden');
+            detailView.classList.remove('hidden');
+        }
+
+        // 5. Firestore에서 리포트 목록 로드 (실시간 반영)
+        function loadReports(currentUserId) {
+            if (!db || !currentUserId) return;
+
+            const collectionPath = `/artifacts/${appId}/users/${currentUserId}/reports`;
+            const q = collection(db, collectionPath);
+            
+            // onSnapshot을 사용하여 실시간으로 데이터 변경 감지
+            onSnapshot(q, (snapshot) => {
+                loadingMessage.classList.add('hidden'); // 로딩 메시지 숨김
+                reportList.innerHTML = ''; // 기존 목록 초기화
+                
+                const reports = [];
+                snapshot.forEach(doc => {
+                    reports.push({ id: doc.id, ...doc.data() });
+                });
+                
+                reportCount.textContent = reports.length;
+
+                if (reports.length === 0) {
+                    noReportsMessage.classList.remove('hidden');
+                    detailView.classList.add('hidden');
+                    selectTip.classList.remove('hidden');
+                    return;
+                }
+                
+                noReportsMessage.classList.add('hidden');
+
+                // 최신순으로 정렬 (Firestore orderBy를 피하고 JS에서 처리)
+                reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                reports.forEach((report, index) => {
+                    const item = document.createElement('div');
+                    item.id = `report-${report.id}`;
+                    item.className = 'report-item';
+                    item.innerHTML = `
+                        <p class="text-sm font-medium text-indigo-500">${report.experienceDate}</p>
+                        <h4 class="text-lg font-bold text-gray-800">${report.programName}</h4>
+                        <div class="text-sm text-gray-500 flex justify-between items-center">
+                            <span>분야: ${report.jobField}</span>
+                            <span class="text-amber-400">${renderRating(report.rating)}</span>
+                        </div>
+                    `;
+                    item.addEventListener('click', () => showReportDetail(report, report.id));
+                    reportList.appendChild(item);
+                    
+                    // 첫 번째 리포트는 자동으로 상세 보기
+                    if (index === 0) {
+                        showReportDetail(report, report.id);
+                    }
+                });
+            }, (error) => {
+                console.error("Error fetching reports:", error);
+                loadingMessage.textContent = `리포트 로드 실패: ${error.message}`;
+                loadingMessage.classList.remove('hidden');
+                loadingMessage.classList.add('text-red-500');
+            });
+        }
+
+        // 6. 페이지 로드 시 초기화
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
