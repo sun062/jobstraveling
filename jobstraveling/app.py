@@ -10,6 +10,14 @@ from datetime import date, datetime
 if 'firestore_reports' not in st.session_state:
     st.session_state.firestore_reports = {} # {userId: [report1, report2, ...]}
 
+# ⭐️ 프로그램 데이터를 저장할 새로운 Mock 변수 추가 ⭐️
+if 'mock_programs' not in st.session_state:
+    st.session_state.mock_programs = [
+        # 초기 더미 데이터
+        {'id': 'P1', 'title': 'AI 개발자 체험 캠프', 'field': 'IT/개발', 'location': '온라인', 'host': '테크 교육원', 'status': '모집 중', 'createdAt': datetime.now().isoformat()},
+        {'id': 'P2', 'title': '친환경 건축 디자인 워크숍', 'field': '건축/환경', 'location': '서울', 'host': '녹색재단', 'status': '모집 마감', 'createdAt': datetime.now().isoformat()},
+    ]
+
 # --- Global Environment Variables ---
 # Canvas 환경 변수 로드 (Firestore 사용을 위한 필수 변수)
 firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
@@ -55,11 +63,17 @@ if 'mock_user_normal' not in st.session_state:
     }
 
 # 리포트 폼 데이터를 저장할 세션 상태 (HTML 컴포넌트에서 전달받음)
-# ⭐️ None 대신 빈 딕셔너리로 초기화하여 안정성 강화 ⭐️
+# None 대신 빈 딕셔너리로 초기화하여 안정성 강화 
 if 'current_report_data' not in st.session_state:
     st.session_state.current_report_data = {}
 if 'report_saved_successfully' not in st.session_state:
     st.session_state.report_saved_successfully = False
+# 프로그램 폼 데이터를 저장할 세션 상태
+if 'current_program_data' not in st.session_state:
+    st.session_state.current_program_data = {}
+if 'program_saved_successfully' not in st.session_state:
+    st.session_state.program_saved_successfully = False
+
 
 # --- Firebase Stubs (Python Backend) ---
 
@@ -70,29 +84,52 @@ def get_current_user_id():
 def save_report_to_firestore(report_data):
     """
     Python 백엔드에서 리포트 데이터를 저장합니다.
-    실제 Firestore SDK 없이 세션 상태를 임시 저장소로 사용합니다.
+    (세션 상태를 임시 저장소로 사용)
     """
     user_id = get_current_user_id()
     if not user_id:
         return False, "사용자 인증 정보를 찾을 수 없습니다."
 
     # 필수 필드 유효성 검사 
-    # HTML에서 trim()을 했기 때문에 Python에서는 빈 문자열만 확인하면 됩니다.
     if not report_data or \
        not report_data.get('programName') or \
        not report_data.get('experienceDate') or \
        report_data.get('rating') is None or \
        not report_data.get('reportContent'):
+        # 이 에러 메시지는 'render_add_report_page'에서 더 상세히 처리됩니다.
         return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
     # Firestore Data Structure Stub
     if user_id not in st.session_state.firestore_reports:
         st.session_state.firestore_reports[user_id] = []
     
-    report_data['id'] = str(len(st.session_state.firestore_reports[user_id]) + 1) # 임시 ID 부여
+    # 중복 방지를 위해 기존 ID 확인 후 부여 (Mocking 환경)
+    report_data['id'] = f"R{len(st.session_state.firestore_reports[user_id]) + 1}_{user_id[:3]}" 
     report_data['createdAt'] = datetime.now().isoformat()
     
     st.session_state.firestore_reports[user_id].append(report_data)
+    
+    return True, ""
+
+def save_program_to_firestore(program_data):
+    """
+    ⭐️ Python 백엔드에서 프로그램 데이터를 저장합니다. (Mocking 구현) ⭐️
+    """
+    # 필수 필드 유효성 검사 (add_program.html 기준)
+    if not program_data or \
+       program_data.get('title', '').strip() == '' or \
+       program_data.get('field', '').strip() == '' or \
+       program_data.get('location', '').strip() == '' or \
+       program_data.get('host', '').strip() == '' or \
+       program_data.get('status', '').strip() == '':
+        return False, "프로그램명, 분야, 장소, 주최, 모집 상태는 필수 입력 항목입니다."
+
+    # ID 부여 및 저장 (Mocking 환경)
+    new_id = f"P{len(st.session_state.mock_programs) + 1}"
+    program_data['id'] = new_id
+    program_data['createdAt'] = datetime.now().isoformat()
+    
+    st.session_state.mock_programs.append(program_data)
     
     return True, ""
 
@@ -266,53 +303,117 @@ def render_home_page():
         navigate(PAGE_LOGIN)
 
 def render_program_list_page():
-    """프로그램 목록 페이지 (기존 로직 유지)"""
+    """
+    프로그램 목록 페이지.
+    ⭐️ Firebase 대신 Mock 데이터를 사용하여 프로그램 목록을 표시하도록 로직을 수정합니다. ⭐️
+    """
     st.title("진로 프로그램 검색 결과 🔎")
-    st.info("이 페이지의 프로그램 목록은 Firebase Firestore에서 실시간으로 로드됩니다.")
-
-    program_list_html = read_html_file('program_list.html')
     
-    if program_list_html:
-        program_list_html = program_list_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
-        program_list_html = program_list_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
-        program_list_html = program_list_html.replace('{{APP_ID}}', appId)
+    # ⭐️ Mock 데이터 로드 및 표시 ⭐️
+    programs = st.session_state.mock_programs
+    
+    if not programs:
+        st.info("등록된 진로 프로그램이 없습니다.")
+    else:
+        # 최신순 정렬
+        sorted_programs = sorted(programs, key=lambda x: x.get('createdAt', datetime.min.isoformat()), reverse=True)
         
-        components.html(
-            program_list_html,
-            height=800,
-            scrolling=True,
-        )
+        st.subheader(f"총 {len(sorted_programs)}개의 프로그램이 등록되어 있습니다.")
+        
+        for program in sorted_programs:
+            with st.expander(f"**[{program.get('status', '미정')}]** {program.get('title', '제목 없음')} ({program.get('field', '미정')})"):
+                st.markdown(f"**주최:** {program.get('host', '미정')}")
+                st.markdown(f"**장소:** {program.get('location', '미정')}")
+                st.markdown(f"**등록일:** {program.get('createdAt', '미정')[:10]}")
+                st.markdown(f"**설명:** {program.get('description', '상세 설명이 아직 없습니다.')}")
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_list"):
         navigate(PAGE_HOME)
 
 def render_add_program_page():
-    """새 프로그램 추가 페이지 (기존 로직 유지)"""
+    """새 프로그램 추가 페이지. HTML 컴포넌트와 Python 저장 로직 연동."""
     if not st.session_state.user_data or not st.session_state.user_data.get('isAdmin', False):
         st.error("접근 권한이 없습니다.")
         navigate(PAGE_HOME)
         return
 
     st.title("새 진로 프로그램 추가 (관리자 전용) ✏️")
-    st.info("여기에 입력된 프로그램은 Firestore에 저장되어 실시간 목록에 반영됩니다.")
 
     add_program_html = read_html_file('add_program.html')
 
-    if add_program_html:
-        add_program_html = add_program_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
-        add_program_html = add_program_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
-        add_program_html = add_program_html.replace('{{APP_ID}}', appId)
+    component_value = None
+    html_content_safe = str(add_program_html) if add_program_html is not None else ""
 
-        components.html(
-            add_program_html,
-            height=600,
-            scrolling=False,
-        )
+    if html_content_safe.strip():
+        try:
+            # HTML 컴포넌트 렌더링 및 데이터 수신
+            component_value = components.html(
+                html=html_content_safe.replace('{{APP_ID}}', appId), # APP_ID는 Firebase 용이지만, HTML 내에서 데이터 통신용으로 사용될 수 있음
+                height=700,
+                scrolling=True,
+                key="program_add_component" # key를 명시하여 안정성 확보
+            )
+        except Exception as e:
+            st.error(f"⚠️ 컴포넌트 렌더링 중 오류 발생: {e}")
+            
+    # ⭐️ HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트 ⭐️
+    current_data = None
+    if isinstance(component_value, dict) and 'programData' in component_value:
+        current_data = component_value['programData']
+        if current_data is not None:
+             st.session_state.current_program_data = current_data
+        else:
+             st.session_state.current_program_data = {}
     
+    st.markdown("---")
+
+    # ⭐️ 프로그램 저장 버튼 ⭐️
+    if st.button("🚀 프로그램 등록하기", key="submit_program_button"):
+        
+        data_to_save = st.session_state.get('current_program_data', {})
+
+        # 필수 필드 유효성 검사 (save_program_to_firestore 함수와 동일)
+        is_valid = (
+            data_to_save.get('title', '').strip() != '' and 
+            data_to_save.get('field', '').strip() != '' and 
+            data_to_save.get('location', '').strip() != '' and 
+            data_to_save.get('host', '').strip() != '' and 
+            data_to_save.get('status', '').strip() != ''
+        )
+
+        if is_valid:
+            success, message = save_program_to_firestore(data_to_save)
+            
+            if success:
+                st.session_state.program_saved_successfully = True
+                st.session_state.current_program_data = {} # 저장 후 데이터 초기화
+                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행
+            else:
+                # save_program_to_firestore 함수에서 발생한 오류 메시지
+                st.error(f"⚠️ 프로그램 등록 실패: {message}")
+        else:
+            st.error("⚠️ 모든 필수 항목을 입력했는지 확인해 주세요. (프로그램명, 분야, 장소, 주최, 모집 상태)")
+            st.warning("❌ 누락된 항목이 없는지 폼을 다시 한번 확인하고 '프로그램 등록하기' 버튼을 눌러주세요.")
+
+
+    # 5. 저장 성공 후 상태
+    if st.session_state.get('program_saved_successfully', False):
+        st.success("🎉 새로운 프로그램이 성공적으로 등록되었습니다.")
+        st.session_state.program_saved_successfully = False 
+        
+        col_list, col_home = st.columns(2)
+        with col_list:
+            if st.button("🔎 프로그램 목록 보기", key="post_save_view_programs"):
+                navigate(PAGE_PROGRAM_LIST)
+        with col_home:
+            if st.button("메인 화면으로 돌아가기", key="post_save_program_home"):
+                navigate(PAGE_HOME)
+
     st.markdown("---")
     if st.button("프로그램 목록 보기", key="back_to_list_from_add"):
         navigate(PAGE_PROGRAM_LIST)
+
 
 def render_add_report_page():
     """
@@ -330,34 +431,23 @@ def render_add_report_page():
     if html_content_safe.strip():
         try:
             component_value = components.html(
-                html=html_content_safe,  # 안전하게 변환된 문자열 전달
+                html=html_content_safe,
                 height=700, 
                 scrolling=True,
+                key="report_add_component" # key를 명시하여 안정성 확보
             )
         except Exception as e:
             st.error(f"⚠️ 컴포넌트 렌더링 중 Streamlit 내부 오류 발생: {e}. HTML 파일 내용을 다시 확인해 주세요.")
-            st.info(f"시도된 HTML 길이: {len(html_content_safe)}")
-    else:
-        st.error(f"⚠️ 심각: 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다.")
-        st.info("HTML 폼이 표시되지 않아 리포트 저장 기능을 사용할 수 없습니다. 파일 경로가 올바른지 확인해 주세요.")
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
-    current_data = None
-    # ⭐️ Streamlit 컴포넌트가 값을 반환했고, 그 값이 딕셔너리 형태라면 데이터를 업데이트합니다. ⭐️
+    # ⭐️ HTML에서 보낸 데이터를 즉시 세션 상태에 반영합니다. ⭐️
     if isinstance(component_value, dict) and 'reportData' in component_value:
         current_data = component_value['reportData']
-        # 데이터를 세션 상태에 저장합니다.
-        if current_data is not None:
-             st.session_state.current_report_data = current_data
-        else:
-             # HTML에서 null을 보냈더라도, 빈 딕셔너리로 초기화하여 None 상태를 방지
-             st.session_state.current_report_data = {}
-
+        # 데이터가 None일 경우 빈 딕셔너리로 강제하여 안정성 확보
+        st.session_state.current_report_data = current_data if current_data is not None else {}
     
-    # st.sidebar.json(st.session_state.get('current_report_data'))
-
-
+    
     st.markdown("---")
 
     # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
@@ -365,11 +455,10 @@ def render_add_report_page():
         
         # 버튼 클릭 후, 페이지가 재실행되면서 바로 위에서 업데이트된
         # st.session_state.current_report_data를 사용합니다.
-        data_to_save = st.session_state.get('current_report_data', {}) # 초기값을 빈 딕셔너리로 설정하여 None 에러 방지
+        data_to_save = st.session_state.get('current_report_data', {}) 
 
         # ⭐️ 강화된 유효성 검사 ⭐️
         is_valid = (
-            # data_to_save가 딕셔너리여야 하며 (data_to_save is not None은 이제 필요 없음, 초기값이 {}이므로)
             data_to_save.get('programName', '').strip() != '' and 
             data_to_save.get('experienceDate') and 
             data_to_save.get('rating') is not None and 
