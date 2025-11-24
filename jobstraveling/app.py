@@ -17,6 +17,10 @@ MOCK_PROGRAMS = [
 REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
 FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
+# Base64 데이터를 삽입할 고유 플레이스홀더
+BASE64_PLACEHOLDER = "__BASE64_DATA_TO_INSERT__"
+SCRIPT_PLACEHOLDER = "__STREAMLIT_SCRIPT_TO_INSERT__"
+
 # --- 1. 로그인 페이지 HTML 콘텐츠 (Base64 인코딩 대상) ---
 def get_login_html_base64():
     """
@@ -87,12 +91,13 @@ def get_login_html_base64():
 def get_base64_decoder_html():
     """
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
-    최소한의 HTML 스크립트를 반환합니다. (Streamlit 포맷팅 오류 방지 로직 적용)
+    HTML 스크립트를 반환합니다. (Python 포맷팅 충돌 완전 회피)
     """
     encoded_content = get_login_html_base64()
     
-    # 템플릿 (Raw String)
-    decoder_template = r"""
+    # 템플릿 (Raw String) - JS 중괄호가 포함되어 있지만, Python 포맷팅 키는 사용하지 않습니다.
+    # 대신 BASE64_PLACEHOLDER를 사용하여 Python의 .replace()로 데이터를 삽입합니다.
+    decoder_template = rf"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -102,62 +107,52 @@ def get_base64_decoder_html():
 <body>
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
-        // 이 포맷팅 키에 Base64 데이터가 삽입됩니다.
-        const encoded = '{encoded_base64_data}'; 
+        // 이 곳에 Base64 데이터가 Python의 .replace() 함수로 직접 삽입됩니다.
+        const encoded = '{BASE64_PLACEHOLDER}'; 
         
-        // Base64 디코딩 함수 (JS 중괄호가 포함되어 있음)
-        function decodeBase64(base64) {
+        // Base64 디코딩 함수
+        function decodeBase64(base64) {{
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
+            for (let i = 0; i < len; i++) {{
                 bytes[i] = binary_string.charCodeAt(i);
-            }
+            }}
             return new TextDecoder().decode(bytes);
-        }
+        }}
 
         // 디코딩 및 삽입 로직
-        try {
+        try {{
             const decodedHtml = decodeBase64(encoded);
             document.open();
             document.write(decodedHtml);
             document.close();
-        } catch(e) {
+        }} catch(e) {{
             const msgEl = document.getElementById('loading-message');
-            if (msgEl) {
+            if (msgEl) {{
                 msgEl.style.color = 'red';
                 msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
-            }
+            }}
             console.error("Base64 decoding failed:", e);
-        }
+        }}
     </script>
 </body>
 </html>
 """
     
-    # --- 근본적인 해결책: 프로그램 이스케이프 로직 강화 ---
+    # Base64 데이터를 플레이스홀더에 직접 삽입하고 반환합니다. 
+    # 이 최종 문자열은 Streamlit components.html로 전달될 때 어떤 Python 포맷팅 키도 포함하지 않습니다.
+    final_html = decoder_template.replace(BASE64_PLACEHOLDER, encoded_content)
     
-    # 1. 포맷팅 키를 임시 Placeholder로 대체
-    placeholder = "__ENCODED_DATA_PLACEHOLDER__"
-    escaped_template = decoder_template.replace("{encoded_base64_data}", placeholder)
-    
-    # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
-    # 이중 중괄호로 강제 변환하여 Streamlit의 포맷팅 엔진을 통과할 수 있게 합니다.
-    escaped_template = escaped_template.replace("{", "{{").replace("}", "}}")
-    
-    # 3. Placeholder를 포맷팅 키로 다시 복원
-    # 이 부분이 Streamlit의 `components.html`에 의해 안전하게 처리되어야 하는 유일한 포맷팅 필드입니다.
-    final_template = escaped_template.replace(placeholder, "{encoded_base64_data}")
-
-    # 4. 최종적으로 Base64 데이터 삽입 후 반환
-    return final_template.format(encoded_base64_data=encoded_content)
+    return final_html
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
-    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함하며, JS 중괄호는 이스케이프됩니다."""
+    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. SCRIPT_PLACEHOLDER를 포함합니다."""
     
     # Home Page HTML 템플릿 (Raw String)
-    html = r"""
+    # SCRIPT_PLACEHOLDER를 사용하여 Python의 .replace()로 데이터를 삽입합니다.
+    html = rf"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -166,33 +161,33 @@ def get_base_html_content():
     <title>잡스트레블링 - 홈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { 
+        body {{ 
             font-family: 'Inter', sans-serif; 
             background-color: #f0f4f8; 
             min-height: 100vh; 
             margin: 0;
             padding: 0;
-        }
-        .header-bg {
+        }}
+        .header-bg {{
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        }
-        .program-card {
+        }}
+        .program-card {{
             transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .program-card:hover {
+        }}
+        .program-card:hover {{
             transform: translateY(-4px);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
-        .tag-active {
+        }}
+        .tag-active {{
             background-color: #2563eb; /* Blue 700 */
             color: white;
             border-color: #2563eb;
-        }
-        .tag-inactive {
+        }}
+        .tag-inactive {{
             background-color: #e0f2f7; /* Light Cyan */
             color: #0c4a6e; /* Cyan 900 */
             border-color: #bae6fd; /* Cyan 200 */
-        }
+        }}
     </style>
 </head>
 <body class="p-0">
@@ -285,9 +280,9 @@ def get_base_html_content():
 
     <script type="module">
         // Firebase 초기화 및 인증 로직
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {{ getAuth, signInAnonymously, signInWithCustomToken }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {{ getFirestore, setLogLevel }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         let db;
         let auth;
@@ -305,10 +300,10 @@ def get_base_html_content():
         let currentFields = []; 
         
         // --- Firebase 초기화 함수 ---
-        async function initializeFirebase() {
-            try {
+        async function initializeFirebase() {{
+            try {{
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{{}}');
                 // __initial_auth_token이 'undefined'가 아닐 때만 사용
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
@@ -317,73 +312,73 @@ def get_base_html_content():
                 auth = getAuth(app);
                 setLogLevel('Debug');
                 
-                if (initialAuthToken) {
+                if (initialAuthToken) {{
                     await signInWithCustomToken(auth, initialAuthToken);
-                } else {
+                }} else {{
                     await signInAnonymously(auth);
-                }
+                }}
                 
                 userId = auth.currentUser?.uid || crypto.randomUUID();
                 isFirebaseReady = true; 
                 console.log("Firebase initialized successfully. User ID:", userId);
                 
-                if (typeof onPageLoad === 'function') {
+                if (typeof onPageLoad === 'function') {{
                     onPageLoad(); 
-                }
+                }}
 
-            } catch (error) {
+            }} catch (error) {{
                 console.error("Firebase initialization or sign-in failed:", error);
                 showMessage("Firebase 초기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-            }
-        }
+            }}
+        }}
         
         // --- 유틸리티 함수 (메시지 박스) ---
         let globalNextAction = null;
-        function showMessage(text, action = null) {
+        function showMessage(text, action = null) {{
             const messageBox = document.getElementById('messageBox');
             const messageText = document.getElementById('messageText');
             
             messageText.textContent = text;
             globalNextAction = action; 
             if (messageBox) messageBox.classList.remove('hidden');
-        }
+        }}
 
-        function hideMessage() {
+        function hideMessage() {{
             const messageBox = document.getElementById('messageBox');
             if (messageBox) messageBox.classList.add('hidden');
-        }
+        }}
         
-        window.continueAction = function() { // 전역 함수로 등록
+        window.continueAction = function() {{ // 전역 함수로 등록
             hideMessage();
-            if (typeof globalNextAction === 'function') {
+            if (typeof globalNextAction === 'function') {{
                 globalNextAction(); 
                 globalNextAction = null; 
-            }
-        }
+            }}
+        }}
 
         // --- 백엔드 (app.py) 통신 관련 함수 ---
         
         // Streamlit에 초기 데이터 요청
-        function requestInitialData() {
-            parent.postMessage({ type: 'GET_INITIAL_DATA' }, '*');
-        }
+        function requestInitialData() {{
+            parent.postMessage({{ type: 'GET_INITIAL_DATA' }}, '*');
+        }}
 
         // Streamlit에 로그아웃 요청
-        function requestStreamlitLogout() {
-             showMessage('로그아웃 하시겠습니까?', () => {
+        function requestStreamlitLogout() {{
+             showMessage('로그아웃 하시겠습니까?', () => {{
                  // 로그아웃은 미인증 상태로 되돌리고 재실행을 요청합니다.
-                 parent.postMessage({type: 'LOGOUT'}, '*');
-             });
-        }
+                 parent.postMessage({{type: 'LOGOUT'}}, '*');
+             }});
+        }}
         
         // 백엔드에서 메시지를 수신하는 리스너
-        window.addEventListener('message', (event) => {
+        window.addEventListener('message', (event) => {{
             if (event.source !== window.parent) return;
 
             const data = event.data;
             if (typeof data !== 'object' || data === null) return;
 
-            switch (data.type) {
+            switch (data.type) {{
                 case 'PROGRAM_DATA':
                     Programs = data.programs || [];
                     Regions = data.regions || [];
@@ -398,14 +393,14 @@ def get_base_html_content():
                     break;
                 default:
                     break;
-            }
-        });
+            }}
+        }});
         
         window.onload = initializeFirebase;
         
         // --- 프로그램 렌더링 및 필터링 로직 ---
         
-        function createProgramCard(program) {
+        function createProgramCard(program) {{
             const card = document.createElement('a');
             card.href = program.url; 
             card.target = "_blank"; 
@@ -414,60 +409,60 @@ def get_base_html_content():
             const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
             const fieldTags = (program.fields || []).map(field => 
-                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
+                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${{field}}</span>`
             ).join('');
 
             card.innerHTML = `
-                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${program.title}" class="w-full h-40 object-cover">
+                <img src="${{program.img}}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${{program.title}}" class="w-full h-40 object-cover">
                 <div class="p-4 space-y-2">
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
-                        ${fieldTags}
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${{typeColor}}">${{program.type}}</span>
+                        ${{fieldTags}}
                     </div>
-                    <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
-                    <p class="text-sm text-gray-500">${program.description}</p>
+                    <h3 class="text-lg font-bold text-gray-800 truncate">${{program.title}}</h3>
+                    <p class="text-sm text-gray-500">${{program.description}}</p>
                     <p class="text-xs text-gray-400 font-medium flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        ${program.region}
+                        ${{program.region}}
                     </p>
                 </div>
             `;
 
             return card;
-        }
+        }}
 
-        function renderPrograms(programs) {
+        function renderPrograms(programs) {{
             const container = document.getElementById('programList');
             if (!container) return;
 
             container.innerHTML = '';
             
-            if (programs.length === 0) {
+            if (programs.length === 0) {{
                 container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다. 검색 조건을 변경해 보세요.</p>';
                 return;
-            }
+            }}
 
-            programs.forEach(program => {
+            programs.forEach(program => {{
                 container.appendChild(createProgramCard(program));
-            });
-        }
+            }});
+        }}
         
-        window.filterPrograms = function() {
+        window.filterPrograms = function() {{
             const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
             const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
 
-            const filtered = Programs.filter(program => {
+            const filtered = Programs.filter(program => {{
                 const regionMatch = !regionToFilter || program.region === regionToFilter;
                 const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => (program.fields || []).includes(field));
 
                 return regionMatch && fieldMatch;
-            });
+            }});
 
             renderPrograms(filtered);
             updateFilterDisplay();
-        }
+        }}
 
-        function updateFilterDisplay() {
+        function updateFilterDisplay() {{
             const regionText = currentRegion || "전국";
             const fieldText = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "전체 분야";
             
@@ -475,131 +470,136 @@ def get_base_html_content():
             document.getElementById('selectedFieldText').textContent = fieldText;
             
             document.getElementById('currentFilters').innerHTML = `
-                현재 필터: <span class="font-bold">${regionText}</span> & <span class="font-bold">${fieldText}</span>
+                현재 필터: <span class="font-bold">${{regionText}}</span> & <span class="font-bold">${{fieldText}}</span>
             `;
-        }
+        }}
 
-        window.resetFilters = function() {
+        window.resetFilters = function() {{
             currentRegion = "";
             currentFields = [];
             filterPrograms();
             showMessage('검색 조건이 초기화되었습니다.');
-        }
+        }}
 
-        window.onPageLoad = function() {
+        window.onPageLoad = function() {{
             requestInitialData();
             updateFilterDisplay();
-        }
+        }}
         
         // --- 모달 관련 로직 ---
 
-        function createRegionOptions() {
+        function createRegionOptions() {{
             const container = document.getElementById('regionOptions');
             container.innerHTML = ''; 
-            Regions.forEach(region => {
+            Regions.forEach(region => {{
                 const button = document.createElement('button');
                 button.textContent = region;
                 button.className = "p-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-500 hover:text-white transition text-sm font-medium";
                 button.onclick = () => selectRegion(region);
                 container.appendChild(button);
-            });
-        }
+            }});
+        }}
 
-        function selectRegion(region) {
+        function selectRegion(region) {{
             currentRegion = region;
             hideRegionModal();
             filterPrograms(); 
             updateFilterDisplay();
-        }
+        }}
 
-        window.showRegionModal = function() {
-            if (!isFirebaseReady || Regions.length === 0) {
+        window.showRegionModal = function() {{
+            if (!isFirebaseReady || Regions.length === 0) {{
                  showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
                  return;
-            }
+            }}
             document.getElementById('regionModal').classList.remove('hidden');
-        }
+        }}
 
-        window.hideRegionModal = function() {
+        window.hideRegionModal = function() {{
             document.getElementById('regionModal').classList.add('hidden');
-        }
+        }}
 
-        function createFieldOptions() {
+        function createFieldOptions() {{
             const container = document.getElementById('fieldOptions');
             container.innerHTML = ''; 
-            Fields.forEach(field => {
+            Fields.forEach(field => {{
                 const button = document.createElement('button');
                 button.textContent = field;
                 button.setAttribute('data-field', field);
                 
                 const isActive = currentFields.includes(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{isActive ? 'tag-active' : 'tag-inactive'}}`;
                 
                 button.onclick = () => toggleField(field, button);
                 container.appendChild(button);
-            });
-        }
+            }});
+        }}
         
-        function toggleField(field, button) {
+        function toggleField(field, button) {{
             const index = currentFields.indexOf(field);
-            if (index > -1) {
+            if (index > -1) {{
                 currentFields.splice(index, 1);
                 button.classList.remove('tag-active');
                 button.classList.add('tag-inactive');
-            } else {
+            }} else {{
                 currentFields.push(field);
                 button.classList.remove('tag-inactive');
                 button.classList.add('tag-active');
-            }
-        }
+            }}
+        }}
         
-        window.showFieldModal = function() {
-            if (!isFirebaseReady || Fields.length === 0) {
+        window.showFieldModal = function() {{
+            if (!isFirebaseReady || Fields.length === 0) {{
                  showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
                  return;
-            }
+            }}
             // 모달을 열 때 현재 상태를 반영합니다.
-            document.querySelectorAll('#fieldOptions button').forEach(button => {
+            document.querySelectorAll('#fieldOptions button').forEach(button => {{
                 const field = button.getAttribute('data-field');
                 const isActive = currentFields.includes(field);
                 button.classList.toggle('tag-active', isActive);
                 button.classList.toggle('tag-inactive', !isActive);
-            });
+            }});
             document.getElementById('fieldModal').classList.remove('hidden');
-        }
+        }}
 
-        window.applyFieldSelection = function() {
+        window.applyFieldSelection = function() {{
             document.getElementById('fieldModal').classList.add('hidden');
             filterPrograms();
             updateFilterDisplay();
-        }
+        }}
         
         updateFilterDisplay();
 
     </script>
-    {streamlit_data_script}
+    {SCRIPT_PLACEHOLDER}
 </body>
 </html>
 """
     
-    # --- 근본적인 해결책: 프로그램 이스케이프 로직 적용 ---
+    # Python의 f-string 기능을 방지하기 위해 Raw String 내부의 중괄호를 이중 중괄호로 대체합니다.
+    # Note: 이 코드는 JavaScript 내부의 중괄호는 이미 `rf"""..."""` 구문 내에서 이스케이프되었기 때문에,
+    # 실제 Python 코드에 포함되는 포맷팅 필드에만 해당합니다.
+    # 하지만 HTML 템플릿 자체를 세션에 저장할 때도 포맷팅 문제가 발생하지 않도록,
+    # SCRIPT_PLACEHOLDER를 제외한 모든 중괄호를 이스케이프해야 합니다.
     
-    # 1. 템플릿의 포맷팅 키를 임시 Placeholder로 대체
-    placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
-    content = html.replace("{streamlit_data_script}", placeholder)
+    # 1. 포맷팅 키를 임시 Placeholder로 대체
+    placeholder = SCRIPT_PLACEHOLDER
+    content = html.replace(placeholder, "___TEMP_SCRIPT_HOLDER___")
     
     # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
-    content = content.replace("{", "{{").replace("}", "}}")
+    content = content.replace("{{", "{{{{").replace("}}", "}}}}")
     
-    # 3. Placeholder를 포맷팅 키로 다시 복원
-    final_template = content.replace(placeholder, "{streamlit_data_script}")
-    return final_template
+    # 3. Placeholder를 포맷팅 키로 다시 복원 (여기에 데이터가 들어갈 것입니다)
+    final_template = content.replace("___TEMP_SCRIPT_HOLDER___", placeholder)
 
+    return final_template
 
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
 def render_login_page():
     
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다.
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. 
+    # 이 함수는 이미 완전하게 조립된 (포맷팅 필드가 없는) HTML 문자열을 반환합니다.
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
@@ -623,7 +623,7 @@ def render_home_page():
     
     # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
-        # get_base_html_content()는 이미 JS 중괄호가 이스케이프된 템플릿을 반환합니다.
+        # get_base_html_content()는 SCRIPT_PLACEHOLDER가 포함된 이스케이프된 템플릿을 반환합니다.
         st.session_state['base_html'] = get_base_html_content()
         
     base_html_template = st.session_state['base_html'] 
@@ -634,7 +634,7 @@ def render_home_page():
     # current_content가 없거나 문자열이 아니라면, 기본 템플릿으로 초기화합니다.
     if not isinstance(current_content, str) or not current_content:
         # 빈 스크립트를 삽입한 기본 HTML로 초기화 (이스케이프된 템플릿 사용)
-        initial_html = base_html_template.format(streamlit_data_script="")
+        initial_html = base_html_template.replace(SCRIPT_PLACEHOLDER, "")
         st.session_state['current_html'] = initial_html
         current_content = initial_html # 렌더링에 사용할 변수 업데이트
 
@@ -664,17 +664,19 @@ def render_home_page():
                 # 5. 데이터 전송을 위한 동적 스크립트 생성
                 data_json = json.dumps(data_to_send)
                 
+                # Base64 대신 JSON.stringify를 사용해 데이터를 인라인으로 삽입합니다.
+                # 이 스크립트에는 Python 포맷팅 키가 없습니다.
                 streamlit_data_script = f"""
                 <script>
                     // 데이터 주입 스크립트
                     const dataPayload = {data_json};
-                    window.parent.postMessage(dataPayload, '*'); 
+                    window.postMessage(dataPayload, '*'); 
                 </script>
                 """
                 
                 # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
-                # 이스케이프된 base_html_template을 안전하게 사용합니다.
-                new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
+                # .replace()를 사용하므로 포맷팅 충돌이 발생하지 않습니다.
+                new_html = st.session_state['base_html'].replace(SCRIPT_PLACEHOLDER, streamlit_data_script)
                 
                 # 7. 세션 상태 업데이트 및 재실행 요청
                 st.session_state['current_html'] = new_html
