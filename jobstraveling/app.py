@@ -4,11 +4,6 @@ import os
 import json 
 from datetime import date, datetime 
 
-# --- Firebase Imports ---
-# NOTE: Firebase 관련 import는 HTML/React/Angular 파일 내의 <script type="module"> 안에서 이루어집니다.
-# Python 파일에서는 Firebase SDK가 직접 실행되지 않으므로, 이 파일을 실행할 환경에 맞게 Mock 처리하거나
-# Streamlit 컴포넌트 내부에서만 JS SDK를 사용해야 합니다. 
-
 # --- Global Environment Variables ---
 # Canvas 환경 변수 로드 (Firestore 사용을 위한 필수 변수)
 firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
@@ -187,7 +182,18 @@ def render_home_page():
     user_name = user_info.get('studentName', '사용자')
     is_admin = user_info.get('isAdmin', False)
 
-    st.title("잡스트레블링 메인 화면 💼")
+    # 1. 제목과 '잡스리포트 기록하기' 버튼을 나란히 배치 (요청 사항)
+    col_title, col_button = st.columns([4, 1])
+
+    with col_title:
+        st.title("🗺️ Job-Trekking 홈 💼")
+    
+    with col_button:
+        # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
+        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
+        if st.button("📝 잡스리포트 기록하기", key="navigate_to_report_from_home"):
+            navigate(PAGE_ADD_REPORT) # 잡스리포트 페이지로 이동
+
     st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
     
     # 관리자 기능 버튼 추가
@@ -196,6 +202,8 @@ def render_home_page():
             navigate(PAGE_ADD_PROGRAM)
 
     # home.html 파일 읽기
+    # NOTE: 사용자가 이 HTML 파일 내용을 '홈 화면 (업데이트됨)'으로 변경했을 수 있지만, 
+    # 파일명은 변경하지 않은 것으로 가정하고 로드합니다.
     html_content = read_html_file('home.html')
     
     if html_content:
