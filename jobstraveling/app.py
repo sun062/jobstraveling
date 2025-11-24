@@ -36,11 +36,13 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def get_login_html_content():
     """
     로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다. 
-    Raw String(r'''...''')과 모든 중괄호의 수동 이스케이프를 사용하여 Streamlit 충돌을 방지합니다.
+    문자열 리스트와 join()을 사용하여 Python의 포맷팅 엔진 간섭을 완전히 차단합니다.
     """
-    # Raw String으로 정의하여 파이썬의 포맷팅 시도를 차단합니다.
-    # 모든 중괄호는 {{ 또는 }} 형태로 수동 이스케이프됩니다.
-    html = r"""
+    # Raw String으로 정의하고 join을 통해 최종 문자열을 만듭니다.
+    # 중괄호가 하나만 있는 경우에도 충돌을 일으킬 수 있으므로, 
+    # {{ 와 }} 형태로 수동 이스케이프를 유지합니다. (Raw String 내부에서는 필요 없을 수 있으나 안전을 위해 유지)
+    html_lines = [
+        r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -96,7 +98,9 @@ def get_login_html_content():
 </body>
 </html>
     """
-    return html
+    ]
+    # 문자열 리스트를 연결하여 최종 HTML을 반환합니다.
+    return "".join(html_lines)
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
@@ -535,7 +539,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # Raw String 및 이스케이프된 로그인 HTML 콘텐츠를 가져옵니다.
+    # 문자열 리스트를 join하여 포맷팅 엔진을 우회한 로그인 HTML 콘텐츠를 가져옵니다.
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
