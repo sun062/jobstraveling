@@ -17,13 +17,27 @@
         .required::after { content: '*'; color: #ef4444; margin-left: 4px; }
         .rating-stars input[type="radio"] { display: none; }
         .rating-stars label {
-            font-size: 2rem; color: #d1d5db; cursor: pointer; transition: color 0.2s;
+            /* 별점 레이블 크기 및 기본 색상 */
+            font-size: 2rem; 
+            color: #d1d5db; /* 회색(빈 별) */
+            cursor: pointer; 
+            transition: color 0.2s;
+            /* 별 모양 유니코드 적용 */
+            line-height: 1; /* 높이 조정 */
+            display: inline-block;
         }
+        /* 체크된 별과 그 앞의 모든 별들 */
         .rating-stars input[type="radio"]:checked ~ label,
+        /* 마우스 오버 시 별들 */
         .rating-stars input[type="radio"]:hover ~ label,
-        .rating-stars label:hover { color: #facc15; }
-        .rating-stars { direction: rtl; }
-        .rating-stars > label { direction: ltr; }
+        .rating-stars label:hover { 
+            color: #facc15; /* 노란색(채워진 별) */
+        }
+        .rating-stars { 
+            direction: rtl; /* RTL: 별을 오른쪽에 정렬하여 왼쪽으로 마우스 오버 시 채워지게 함 */
+            display: flex; /* flexbox 사용 */
+            gap: 0.1rem; /* 별 간격 미세 조정 */
+        }
     </style>
     <!-- Streamlit Component API 로드 -->
     <script src="https://cdn.jsdelivr.net/npm/@streamlit/lib@0.2.3/dist/streamlit-component-lib.js"></script>
@@ -61,19 +75,19 @@
                     <div class="rating-stars flex items-center justify-start space-x-1">
                         <!-- 5점 -->
                         <input type="radio" id="star5" name="rating" value="5" required>
-                        <label for="star5" title="5점"></label>
+                        <label for="star5" title="5점">★</label>
                         <!-- 4점 -->
                         <input type="radio" id="star4" name="rating" value="4">
-                        <label for="star4" title="4점"></label>
+                        <label for="star4" title="4점">★</label>
                         <!-- 3점 -->
                         <input type="radio" id="star3" name="rating" value="3">
-                        <label for="star3" title="3점"></label>
+                        <label for="star3" title="3점">★</label>
                         <!-- 2점 -->
                         <input type="radio" id="star2" name="rating" value="2">
-                        <label for="star2" title="2점"></label>
+                        <label for="star2" title="2점">★</label>
                         <!-- 1점 -->
                         <input type="radio" id="star1" name="rating" value="1">
-                        <label for="star1" title="1점"></label>
+                        <label for="star1" title="1점">★</label>
                     </div>
                 </div>
 
