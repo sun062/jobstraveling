@@ -3,166 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>잡스리포트 기록</title>
+    <title>잡스리포트 기록 폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
-        .report-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
+        .form-container { max-width: 800px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); }
+        .input-group label { display: block; margin-bottom: 8px; font-weight: 600; color: #333; }
+        .input-group input, .input-group select, .input-group textarea {
+            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; transition: border-color 0.3s;
         }
-        .form-input, .form-textarea, .form-date {
-            width: 100%;
-            padding: 12px;
-            margin-top: 5px;
-            margin-bottom: 20px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            box-sizing: border-box;
+        .input-group input:focus, .input-group textarea:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
+        .required::after { content: '*'; color: #ef4444; margin-left: 4px; }
+        .rating-stars input[type="radio"] { display: none; }
+        .rating-stars label {
+            font-size: 2rem; color: #d1d5db; cursor: pointer; transition: color 0.2s;
         }
-        .form-input:focus, .form-textarea:focus, .form-date:focus {
-            border-color: #3b82f6;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-        /* 별점 스타일 */
-        .rating {
-            display: inline-block;
-            direction: rtl; 
-            unicode-bidi: bidi-override;
-        }
-        .rating input {
-            display: none;
-        }
-        .rating label {
-            color: #ddd;
-            font-size: 3rem;
-            padding: 0 5px;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-        .rating input:checked ~ label {
-            color: #fbbf24; 
-        }
-        .rating label:hover,
-        .rating label:hover ~ label {
-            color: #f59e0b; 
-        }
+        .rating-stars input[type="radio"]:checked ~ label,
+        .rating-stars input[type="radio"]:hover ~ label,
+        .rating-stars label:hover { color: #facc15; }
+        .rating-stars { direction: rtl; }
+        .rating-stars > label { direction: ltr; }
     </style>
+    <!-- Streamlit Component API 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@streamlit/lib@0.2.3/dist/streamlit-component-lib.js"></script>
 </head>
-<body class="p-6">
+<body>
+    <div class="form-container">
+        <!-- onsubmit을 막아 페이지 새로고침을 방지 -->
+        <!-- oninput 이벤트로 데이터가 변경될 때마다 Streamlit으로 전송 -->
+        <form id="report-form" oninput="sendDataToStreamlit()" onsubmit="event.preventDefault(); return false;">
+            <div class="space-y-6">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- 프로그램명 (필수) -->
+                    <div class="input-group">
+                        <label for="programName" class="required">체험 프로그램명</label>
+                        <input type="text" id="programName" placeholder="예: 구글 개발자 캠프" required>
+                    </div>
 
-    <div class="report-container">
-        <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">나의 진로 체험 리포트</h2>
-        
-        <!-- 메시지 박스는 Streamlit Python 쪽에서 관리됩니다. -->
-
-        <form id="report-form">
-            
-            <!-- 1. 체험 정보 -->
-            <div class="mb-6">
-                <label class="block text-lg text-gray-700 font-semibold mb-1" for="programName">체험 프로그램/기관명 (필수)</label>
-                <input type="text" id="programName" class="form-input" required placeholder="예: 구글 코리아 견학, IT 개발자 직무 체험"/>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                    <label class="block text-lg text-gray-700 font-semibold mb-1" for="experienceDate">체험 일자 (필수)</label>
-                    <input type="date" id="experienceDate" class="form-date" required/>
+                    <!-- 체험 일자 (필수) -->
+                    <div class="input-group">
+                        <label for="experienceDate" class="required">체험 일자</label>
+                        <input type="date" id="experienceDate" required>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-lg text-gray-700 font-semibold mb-1" for="jobField">직무/분야</label>
-                    <input type="text" id="jobField" class="form-input" placeholder="예: 소프트웨어 엔지니어, 마케팅"/>
+
+                <!-- 직업 분야 -->
+                <div class="input-group">
+                    <label for="jobField">관련 직업/분야 (선택)</label>
+                    <input type="text" id="jobField" placeholder="예: 소프트웨어 엔지니어, 환경 과학자">
+                </div>
+
+                <!-- 체험 만족도 (별점 - 필수) -->
+                <div class="input-group">
+                    <label class="required">체험 만족도 (별점)</label>
+                    <div class="rating-stars flex items-center justify-start space-x-1">
+                        <!-- 5점 -->
+                        <input type="radio" id="star5" name="rating" value="5" required>
+                        <label for="star5" title="5점"></label>
+                        <!-- 4점 -->
+                        <input type="radio" id="star4" name="rating" value="4">
+                        <label for="star4" title="4점"></label>
+                        <!-- 3점 -->
+                        <input type="radio" id="star3" name="rating" value="3">
+                        <label for="star3" title="3점"></label>
+                        <!-- 2점 -->
+                        <input type="radio" id="star2" name="rating" value="2">
+                        <label for="star2" title="2점"></label>
+                        <!-- 1점 -->
+                        <input type="radio" id="star1" name="rating" value="1">
+                        <label for="star1" title="1점"></label>
+                    </div>
+                </div>
+
+                <!-- 소감 및 내용 (필수) -->
+                <div class="input-group">
+                    <label for="reportContent" class="required">소감 및 기록 내용</label>
+                    <textarea id="reportContent" rows="8" placeholder="체험을 통해 배우고 느낀 점, 주요 활동 내용, 나의 진로에 미친 영향 등을 구체적으로 기록해 주세요." required></textarea>
                 </div>
             </div>
-
-            <!-- 2. 별점 평가 -->
-            <div class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <label class="block text-lg text-gray-700 font-semibold mb-3">체험 만족도 (별점 5점 만점, 필수)</label>
-                <div class="rating">
-                    <input type="radio" id="star5" name="rating" value="5"/>
-                    <label for="star5" title="매우 만족 (5점)">★</label>
-                    <input type="radio" id="star4" name="rating" value="4"/>
-                    <label for="star4" title="만족 (4점)">★</label>
-                    <input type="radio" id="star3" name="rating" value="3"/>
-                    <label for="star3" title="보통 (3점)">★</label>
-                    <input type="radio" id="star2" name="rating" value="2"/>
-                    <label for="star2" title="불만족 (2점)">★</label>
-                    <input type="radio" id="star1" name="rating" value="1"/>
-                    <label for="star1" title="매우 불만족 (1점)">★</label>
-                </div>
-            </div>
-
-            <!-- 3. 상세 기록 -->
-            <div class="mb-6">
-                <label class="block text-lg text-gray-700 font-semibold mb-1" for="reportContent">체험 내용 및 소감 (필수)</label>
-                <textarea id="reportContent" class="form-textarea" rows="8" required placeholder="체험에서 배운 점, 느낀 점, 좋았던 점, 아쉬웠던 점 등을 상세하게 기록해 주세요."></textarea>
-            </div>
-            
-            <!-- 이 버튼은 숨겨지고, Streamlit 버튼이 저장을 담당합니다. -->
-            <button type="button" id="hiddenSubmitBtn" style="display: none;">숨겨진 제출 버튼</button>
         </form>
     </div>
-    
-    <script>
-        const form = document.getElementById('report-form');
-        const fields = [
-            'programName', 
-            'experienceDate', 
-            'jobField', 
-            'reportContent'
-        ];
-        
-        // 폼 데이터를 Streamlit에 전달하는 함수
-        function sendDataToStreamlit() {
-            const data = {};
-            
-            // 텍스트 및 날짜 필드 값 수집
-            fields.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    data[id] = element.value;
-                }
-            });
 
-            // 별점(Rating) 값 수집
-            const ratingElement = form.querySelector('input[name="rating"]:checked');
-            data['rating'] = ratingElement ? parseInt(ratingElement.value, 10) : null;
+    <script>
+        /**
+         * 폼 데이터를 수집하고 Streamlit Python으로 전송하는 함수
+         * - 이제 제출 플래그 없이 오직 데이터만 전송합니다.
+         */
+        function sendDataToStreamlit() {
+            // 1. 데이터 수집
+            const ratingInput = document.querySelector('input[name="rating"]:checked');
             
-            // Streamlit 부모 페이지로 데이터 전송
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: {
-                    reportData: data,
-                    # 이 플래그는 Streamlit 측에서 데이터가 업데이트되었음을 감지하는 데 사용됩니다.
-                    isDataReady: true
-                }
-            }, '*');
+            const reportData = {
+                programName: document.getElementById('programName').value,
+                experienceDate: document.getElementById('experienceDate').value,
+                jobField: document.getElementById('jobField').value,
+                // radio 버튼이 체크된 경우에만 값을 가져오고, 아니면 null로 처리
+                rating: ratingInput ? parseInt(ratingInput.value) : null, 
+                reportContent: document.getElementById('reportContent').value,
+            };
+
+            // 2. Streamlit Python 컴포넌트로 데이터 전송
+            // 'submitted' 플래그 없이 reportData만 전송
+            Streamlit.setComponentValue({ 
+                reportData: reportData
+            });
+            
+            // Streamlit 컴포넌트 높이 업데이트
+            Streamlit.setFrameHeight();
         }
 
-        // 모든 입력 필드에 'input' 및 'change' 이벤트 리스너를 추가합니다.
-        // 사용자가 필드를 변경할 때마다 데이터를 Streamlit Python 쪽으로 보냅니다.
-        // 텍스트 필드, textarea, date 필드
-        fields.forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.addEventListener('input', sendDataToStreamlit);
-                element.addEventListener('change', sendDataToStreamlit);
-            }
-        });
-
-        // 라디오 버튼 (별점)
-        document.querySelectorAll('input[name="rating"]').forEach(radio => {
-            radio.addEventListener('change', sendDataToStreamlit);
-        });
-
-        // 초기 로드 시 한 번 데이터를 전송하여 Streamlit 상태 초기화
-        window.onload = sendDataToStreamlit;
+        // 3. 페이지 로드 시, 초기 값을 Python으로 한 번 전송 (필수)
+        window.onload = function() {
+            sendDataToStreamlit();
+        };
+        
+        // 폼의 oninput 이벤트에 의해 sendDataToStreamlit()가 실시간으로 호출되어 데이터 업데이트
     </script>
 </body>
 </html>
