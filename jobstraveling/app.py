@@ -105,12 +105,12 @@ def get_base64_decoder_html():
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
     
-    Python의 str.format() 충돌을 완전히 회피하기 위해 f-string과 이스케이프된 중괄호({{, }})를 사용합니다.
+    Streamlit의 내부 포맷팅 충돌을 완전히 회피하기 위해 문자열 연결을 사용합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # f-string을 사용하여 Base64 콘텐츠를 직접 삽입하고, JS 중괄호를 모두 이스케이프했습니다.
-    html_content = f"""
+    # 단순 문자열 연결을 사용하여 Base64 콘텐츠를 삽입합니다. (TypeError 회피 핵심)
+    html_content = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -121,43 +121,41 @@ def get_base64_decoder_html():
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
         // Base64로 인코딩된 HTML 콘텐츠 삽입 지점
-        // Python f-string을 사용하여 Base64 데이터를 안전하게 삽입
-        const encoded = '{encoded_content}'; 
+        const encoded = '""" + encoded_content + """'; 
         
         // Base64 디코딩 함수 
-        function decodeBase64(base64) {{
+        function decodeBase64(base64) {
             // 브라우저 API를 사용하여 디코딩
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {{
+            for (let i = 0; i < len; i++) {
                 bytes[i] = binary_string.charCodeAt(i);
-            }}
+            }
             return new TextDecoder().decode(bytes);
-        }}
+        }
 
         // 디코딩 및 삽입
-        try {{
+        try {
             const decodedHtml = decodeBase64(encoded);
             // document.body 대신 document 전체의 내용을 덮어씁니다.
             document.open();
             document.write(decodedHtml);
             document.close();
-        }} catch(e) {{
+        } catch(e) {
             // 오류 발생 시 사용자에게 메시지 표시
             const msgEl = document.getElementById('loading-message');
-            if (msgEl) {{
+            if (msgEl) {
                 msgEl.style.color = 'red';
                 msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
-            }}
+            }
             console.error("Base64 decoding failed:", e);
-        }}
+        }
     </script>
 </body>
 </html>
 """
-    
-    # f-string 정의 시점에 이미 모든 JS 중괄호는 이스케이프된 상태이며, encoded_content가 안전하게 삽입되었습니다.
+    # JS의 중괄호는 이 코드 블록에서 Python 포맷팅 문법으로 해석되지 않아 안전합니다.
     return html_content
 
 
@@ -594,11 +592,8 @@ def get_base_html_content():
 
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
 def render_login_page():
-    # Streamlit의 제목을 임시로 숨깁니다.
-    st.title("Job-Trekking")
-    st.markdown(" ") # 여백
-
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (f-string 방식으로 수정)
+    
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (문자열 연결 방식으로 수정)
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
@@ -671,6 +666,7 @@ def render_home_page():
                 """
                 
                 # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
+                # 이스케이프된 중괄호가 포함된 base_html_template을 사용합니다.
                 new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
                 
                 # 7. 세션 상태 업데이트 및 재실행 요청
