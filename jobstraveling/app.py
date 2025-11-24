@@ -104,15 +104,13 @@ def get_base64_decoder_html():
     """
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
-
-    주의: Streamlit의 포맷팅 충돌을 피하기 위해, 모든 JS 중괄호를 이스케이프하고
-    Base64 문자열만 Python의 .format()으로 안전하게 삽입합니다.
+    
+    Python의 str.format() 충돌을 완전히 회피하기 위해 f-string과 이스케이프된 중괄호({{, }})를 사용합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # 템플릿 내의 모든 중괄호는 이스케이프({{, }})되어야 합니다.
-    # 단, Base64 문자열이 삽입될 {encoded_placeholder}만 제외합니다.
-    template = r"""
+    # f-string을 사용하여 Base64 콘텐츠를 직접 삽입하고, JS 중괄호를 모두 이스케이프했습니다.
+    html_content = f"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -123,7 +121,8 @@ def get_base64_decoder_html():
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
         // Base64로 인코딩된 HTML 콘텐츠 삽입 지점
-        const encoded = '{encoded_placeholder}'; 
+        // Python f-string을 사용하여 Base64 데이터를 안전하게 삽입
+        const encoded = '{encoded_content}'; 
         
         // Base64 디코딩 함수 
         function decodeBase64(base64) {{
@@ -156,13 +155,10 @@ def get_base64_decoder_html():
     </script>
 </body>
 </html>
-    """
+"""
     
-    # 이스케이프되지 않은 {encoded_placeholder}를 제외하고 모든 중괄호 이스케이프
-    escaped_template = template.replace("{", "{{").replace("}", "}}").replace("{{encoded_placeholder}}", "{encoded_placeholder}")
-    
-    # .format()을 사용하여 Base64 데이터를 안전하게 삽입
-    return escaped_template.format(encoded_placeholder=encoded_content)
+    # f-string 정의 시점에 이미 모든 JS 중괄호는 이스케이프된 상태이며, encoded_content가 안전하게 삽입되었습니다.
+    return html_content
 
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
@@ -602,7 +598,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (안전한 포맷팅 방식으로 수정)
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (f-string 방식으로 수정)
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
