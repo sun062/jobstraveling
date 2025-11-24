@@ -299,7 +299,7 @@ def get_base_html_content():
                 <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${program.title}" class="w-full h-40 object-cover">
                 <div class="p-4 space-y-2">
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full {{typeColor}}">${program.type}</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
                         ${fieldTags}
                     </div>
                     <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
@@ -411,7 +411,7 @@ def get_base_html_content():
                 button.setAttribute('data-field', field);
                 
                 const isActive = currentFields.includes(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition {{isActive ? 'tag-active' : 'tag-inactive'}}`;
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
                 
                 button.onclick = () => toggleField(field, button);
                 container.appendChild(button);
@@ -464,25 +464,24 @@ def get_base_html_content():
 # --- 3. Streamlit 페이지 렌더링 함수 ---
 def render_home_page():
     
-    # **수정된 부분: 모든 초기화 로직을 함수 시작 부분에서 완료하여 안정성을 극대화합니다.**
     # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
         st.session_state['base_html'] = get_base_html_content()
         
-    # 2. CURRENT HTML 초기화 (Base HTML이 있으면, Current HTML이 없거나 문자열이 아닐 때 초기화)
-    # st.session_state.get('base_html')을 사용하여 base_html이 확실히 로드된 후 진행합니다.
-    if st.session_state.get('base_html') and ('current_html' not in st.session_state or not isinstance(st.session_state['current_html'], str)):
-        # 최초에는 빈 스크립트를 삽입한 기본 HTML을 사용
-        # base_html이 문자열임을 보장하기 위해 get() 메서드 사용 및 포맷팅 처리
-        st.session_state['current_html'] = st.session_state.get('base_html', "<h1>Error: HTML template missing.</h1>").format(streamlit_data_script="")
+    # **수정된 부분: current_html을 안전하게 추출하고, 없거나 문자열이 아니면 기본값으로 강제 초기화합니다.**
+    # 기본 HTML 템플릿 (빈 스크립트 포함)
+    default_html = st.session_state.get('base_html', "<h1>Error: HTML template missing.</h1>").format(streamlit_data_script="")
     
-    # 3. HTML 컴포넌트 렌더링
-    # 현재 HTML 콘텐츠가 문자열인지 최종적으로 확인하고, 그렇지 않다면 안전한 기본값을 제공합니다.
+    # 현재 콘텐츠를 안전하게 가져옵니다.
     current_content = st.session_state.get('current_html')
+    
+    # current_content가 없거나 문자열이 아니면 기본값으로 재설정
     if not isinstance(current_content, str):
-        # 최악의 경우를 대비한 안전 장치 (이 코드가 실행되면 이전 로직에 문제가 있다는 의미)
-        current_content = "<h1>Initialization Error. Please refresh.</h1>" 
-        
+        current_content = default_html
+        st.session_state['current_html'] = current_content # 세션 상태에도 반영
+
+    # 3. HTML 컴포넌트 렌더링
+    # current_content는 이제 유효한 문자열임이 보장됩니다.
     component_value = components.html(
         current_content,
         height=1200, 
