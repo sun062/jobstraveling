@@ -2,15 +2,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
-# --- 0. 이스케이프 유틸리티 함수 (KeyError 방지) ---
+# --- 0. 이스케이프 유틸리티 함수 (KeyError 방지 - Base HTML 전용) ---
 def escape_curly_braces(html_content):
     """
-    KeyError를 방지하기 위해 포맷팅 키가 아닌 모든 중괄호({, })를 {{, }}로 이스케이프 처리합니다.
-    {streamlit_data_script} 키만 이스케이프하지 않도록 특별히 처리합니다.
+    Base HTML에만 적용되며, {streamlit_data_script}를 제외한 모든 중괄호를 이스케이프 처리합니다.
     """
     # 1. 포맷팅 키를 임시 Placeholder로 대체
     placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
-    # Placeholder가 없는 경우를 대비해 안전하게 대체 (로그인 페이지의 경우)
     content = html_content.replace("{streamlit_data_script}", placeholder)
     
     # 2. 모든 일반 중괄호 이스케이프 처리
@@ -36,7 +34,10 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 
 # --- 2. HTML 콘텐츠 (로그인 템플릿) 로드 ---
 def get_login_html_content():
-    """로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다."""
+    """
+    로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다. 
+    Python의 포맷팅 충돌을 피하기 위해 CSS와 JS의 중괄호가 수동으로 이스케이프 처리되었습니다.
+    """
     html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -46,7 +47,7 @@ def get_login_html_content():
     <title>로그인</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { 
+        body {{ 
             font-family: 'Inter', sans-serif; 
             background-color: #f0f4f8; 
             display: flex;
@@ -55,8 +56,8 @@ def get_login_html_content():
             min-height: 100vh;
             margin: 0;
             padding: 20px;
-        }
-        .login-card {
+        }}
+        .login-card {{
             background-color: white;
             padding: 2.5rem;
             border-radius: 1rem;
@@ -64,7 +65,7 @@ def get_login_html_content():
             max-width: 400px;
             width: 100%;
             text-align: center;
-        }
+        }}
     </style>
 </head>
 <body>
@@ -85,16 +86,16 @@ def get_login_html_content():
     </div>
 
     <script>
-        function simulateLogin() {
+        function simulateLogin() {{
             // Streamlit Python 백엔드에 'home'으로 이동하라는 메시지를 보내 인증 상태를 변경하도록 요청
-            parent.postMessage({ type: 'NAVIGATE', page: 'home' }, '*');
-        }
+            parent.postMessage({{ type: 'NAVIGATE', page: 'home' }}, '*');
+        }}
     </script>
 </body>
 </html>
     """
-    # [수정 사항] 로그인 HTML 콘텐츠에도 중괄호 이스케이프 로직 적용
-    return escape_curly_braces(html)
+    # [수정 사항] 이 HTML은 이미 수동으로 이스케이프되었으므로, 자동 이스케이프 함수를 호출하지 않습니다.
+    return html
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
@@ -523,6 +524,7 @@ def get_base_html_content():
 </body>
 </html>
 """
+    # Base HTML은 동적 스크립트 삽입이 필요하므로 자동 이스케이프 함수를 그대로 유지합니다.
     return escape_curly_braces(html)
 
 # --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
@@ -531,7 +533,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # components.html 호출 전에 HTML 콘텐츠를 미리 로드하여 안정성을 높입니다.
+    # 수동 이스케이프된 로그인 HTML 콘텐츠를 직접 가져옵니다.
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
