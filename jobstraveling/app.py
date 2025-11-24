@@ -12,6 +12,7 @@ def escape_curly_braces(html_content):
     content = html_content.replace("{streamlit_data_script}", placeholder)
     
     # 2. 모든 일반 중괄호 이스케이프 처리
+    # 이중 중괄호로 강제 변환하여 Streamlit의 포맷팅 엔진을 통과할 수 있게 합니다.
     content = content.replace("{", "{{").replace("}", "}}")
     
     # 3. Placeholder를 포맷팅 키로 다시 복원
@@ -36,13 +37,9 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def get_login_html_content():
     """
     로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다. 
-    문자열 리스트와 join()을 사용하여 Python의 포맷팅 엔진 간섭을 완전히 차단합니다.
+    r''' 접두사 없이, 모든 중괄호를 {{ }} 형태로 강제 이스케이프하여 Streamlit 충돌을 방지합니다.
     """
-    # Raw String으로 정의하고 join을 통해 최종 문자열을 만듭니다.
-    # 중괄호가 하나만 있는 경우에도 충돌을 일으킬 수 있으므로, 
-    # {{ 와 }} 형태로 수동 이스케이프를 유지합니다. (Raw String 내부에서는 필요 없을 수 있으나 안전을 위해 유지)
-    html_lines = [
-        r"""
+    html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -98,9 +95,9 @@ def get_login_html_content():
 </body>
 </html>
     """
-    ]
-    # 문자열 리스트를 연결하여 최종 HTML을 반환합니다.
-    return "".join(html_lines)
+    # 마지막 시도: 모든 중괄호를 이스케이프하여 반환
+    # (이미 템플릿 내에서 {{ }} 형태로 되어 있으므로, 이 함수 내에서는 join()이나 추가적인 처리를 하지 않습니다.)
+    return html
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
@@ -539,7 +536,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # 문자열 리스트를 join하여 포맷팅 엔진을 우회한 로그인 HTML 콘텐츠를 가져옵니다.
+    # 로그인 HTML 콘텐츠를 가져옵니다. (강제 이스케이프 적용)
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
