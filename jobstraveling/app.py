@@ -2,6 +2,23 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
+# --- 0. 이스케이프 유틸리티 함수 (KeyError 방지) ---
+def escape_curly_braces(html_content):
+    """
+    KeyError를 방지하기 위해 포맷팅 키가 아닌 모든 중괄호({, })를 {{, }}로 이스케이프 처리합니다.
+    {streamlit_data_script} 키만 이스케이프하지 않도록 특별히 처리합니다.
+    """
+    # 1. 포맷팅 키를 임시 Placeholder로 대체
+    placeholder = "__STREAMLIT_SCRIPT_PLACEHOLDER__"
+    content = html_content.replace("{streamlit_data_script}", placeholder)
+    
+    # 2. 모든 일반 중괄호 이스케이프 처리
+    content = content.replace("{", "{{").replace("}", "}}")
+    
+    # 3. Placeholder를 포맷팅 키로 다시 복원
+    return content.replace(placeholder, "{streamlit_data_script}")
+
+
 # --- 1. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
 MOCK_PROGRAMS = [
     {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
@@ -19,7 +36,7 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 # --- 2. HTML 콘텐츠 (기본 템플릿) 로드 ---
 def get_base_html_content():
     """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함합니다."""
-    return """
+    html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -171,7 +188,8 @@ def get_base_html_content():
             try {
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                 const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
+                // __initial_auth_token이 'undefined'가 아닐 때만 사용
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -441,12 +459,14 @@ def get_base_html_content():
 </body>
 </html>
 """
+    return escape_curly_braces(html)
 
 # --- 3. Streamlit 페이지 렌더링 함수 ---
 def render_home_page():
     
     # 1. 초기 HTML 콘텐츠를 세션 상태에 저장 및 초기화
     if 'base_html' not in st.session_state:
+        # **수정된 부분: escape_curly_braces 함수를 호출하여 HTML을 처리합니다.**
         st.session_state['base_html'] = get_base_html_content()
         # 최초에는 빈 스크립트를 삽입한 기본 HTML을 사용
         st.session_state['current_html'] = st.session_state['base_html'].format(streamlit_data_script="")
