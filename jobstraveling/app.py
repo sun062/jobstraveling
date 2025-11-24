@@ -292,7 +292,7 @@ def get_base_html_content():
             const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
             const fieldTags = (program.fields || []).map(field => 
-                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{field}}</span>`
+                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
             ).join('');
 
             card.innerHTML = `
@@ -468,22 +468,23 @@ def render_home_page():
     if 'base_html' not in st.session_state:
         st.session_state['base_html'] = get_base_html_content()
         
-    # **수정된 부분: current_html을 안전하게 추출하고, 없거나 문자열이 아니면 기본값으로 강제 초기화합니다.**
-    # 기본 HTML 템플릿 (빈 스크립트 포함)
-    default_html = st.session_state.get('base_html', "<h1>Error: HTML template missing.</h1>").format(streamlit_data_script="")
+    # base_html은 이제 확실히 존재합니다.
+    base_html_template = st.session_state['base_html'] 
     
-    # 현재 콘텐츠를 안전하게 가져옵니다.
+    # 2. current_html 초기화 및 유효성 검사 (안전 장치 강화)
     current_content = st.session_state.get('current_html')
     
-    # current_content가 없거나 문자열이 아니면 기본값으로 재설정
-    if not isinstance(current_content, str):
-        current_content = default_html
-        st.session_state['current_html'] = current_content # 세션 상태에도 반영
+    # current_content가 없거나 문자열이 아니라면, 기본 템플릿으로 초기화합니다.
+    if not isinstance(current_content, str) or not current_content:
+        # 빈 스크립트를 삽입한 기본 HTML로 초기화
+        initial_html = base_html_template.format(streamlit_data_script="")
+        st.session_state['current_html'] = initial_html
+        current_content = initial_html # 렌더링에 사용할 변수 업데이트
 
     # 3. HTML 컴포넌트 렌더링
     # current_content는 이제 유효한 문자열임이 보장됩니다.
     component_value = components.html(
-        current_content,
+        current_content, # 오류 발생 지점
         height=1200, 
         scrolling=True,
         key="home_filter_component"
@@ -526,12 +527,15 @@ def render_home_page():
 if __name__ == '__main__':
     st.set_page_config(layout="wide")
 
-    # 가짜 인증 세션 상태 설정
+    # 인증 세션 상태 설정
     if 'user_authenticated' not in st.session_state:
-        st.session_state['user_authenticated'] = True 
+        # **[로그인 플로우 수정]**
+        # 이전에 True로 강제 설정되어 홈 화면이 보였으나, 이제는 기본값을 False로 설정하여
+        # 새로운 세션에서는 로그인 플로우(else 블록)가 작동하도록 합니다.
+        st.session_state['user_authenticated'] = False 
 
     if st.session_state.get('user_authenticated'):
         st.title("잡스트레블링 - 홈 (Streamlit)")
         render_home_page()
     else:
-        st.error("로그인 페이지로 이동해야 합니다.")
+        st.error("🔒 이 앱은 인증이 필요합니다. 로그인 페이지로 이동하세요.")
