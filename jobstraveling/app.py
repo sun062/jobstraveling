@@ -189,7 +189,7 @@ def render_home_page():
     is_admin = user_info.get('isAdmin', False)
 
     st.title("잡스트레블링 메인 화면 💼")
-    st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
+    st.write(f"환영합니다, **{user_name}**님! 아래는 '홈 화면'의 콘텐츠입니다.")
     
     # 관리자 기능 버튼 추가
     if is_admin:
@@ -295,3 +295,4 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+
