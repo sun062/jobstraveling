@@ -33,7 +33,68 @@ MOCK_PROGRAMS = [
 REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
 FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
-# --- 2. HTML 콘텐츠 (기본 템플릿) 로드 ---
+# --- 2. HTML 콘텐츠 (로그인 템플릿) 로드 ---
+def get_login_html_content():
+    """로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다."""
+    html = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f4f8; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .login-card {
+            background-color: white;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1 class="text-4xl font-extrabold text-blue-600 mb-2">🗺️ Job-Trekking</h1>
+        <p class="text-gray-500 mb-8">청소년을 위한 진로 체험 프로그램 검색 서비스</p>
+        
+        <div class="space-y-4 mb-6">
+            <input type="text" placeholder="아이디 (선택 사항)" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" placeholder="비밀번호 (선택 사항)" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        
+        <button onclick="simulateLogin()" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
+            로그인 / Job-Trekking 시작하기
+        </button>
+
+        <p class="text-sm text-gray-400 mt-6">데모 버전: 실제 아이디/비밀번호는 필요하지 않습니다.</p>
+    </div>
+
+    <script>
+        function simulateLogin() {
+            // Streamlit Python 백엔드에 'home'으로 이동하라는 메시지를 보내 인증 상태를 변경하도록 요청
+            parent.postMessage({ type: 'NAVIGATE', page: 'home' }, '*');
+        }
+    </script>
+</body>
+</html>
+    """
+    return html
+
+# --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
 def get_base_html_content():
     """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함합니다."""
     html = """
@@ -250,7 +311,8 @@ def get_base_html_content():
         // Streamlit에 로그아웃 요청
         function requestStreamlitLogout() {
              showMessage('로그아웃 하시겠습니까?', () => {
-                 parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
+                 // 로그아웃은 미인증 상태로 되돌리고 재실행을 요청합니다.
+                 parent.postMessage({type: 'LOGOUT'}, '*');
              });
         }
         
@@ -461,14 +523,35 @@ def get_base_html_content():
 """
     return escape_curly_braces(html)
 
-# --- 3. Streamlit 페이지 렌더링 함수 ---
+# --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
+def render_login_page():
+    # Streamlit의 제목을 임시로 숨깁니다.
+    st.title("Job-Trekking")
+    st.markdown(" ") # 여백
+
+    # 정적 로그인 페이지 HTML 렌더링
+    component_value = components.html(
+        get_login_html_content(),
+        height=700,
+        scrolling=False,
+        key="login_component"
+    )
+
+    # 로그인 페이지에서 온 메시지 처리 (시뮬레이션된 로그인 시도)
+    if component_value:
+        message = component_value
+        # 로그인이 성공적으로 요청되면 인증 상태를 True로 변경하고 재실행합니다.
+        if isinstance(message, dict) and message.get('type') == 'NAVIGATE' and message.get('page') == 'home':
+            st.session_state['user_authenticated'] = True
+            st.rerun()
+
+# --- 5. Streamlit 페이지 렌더링 함수 (Home) ---
 def render_home_page():
     
     # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
         st.session_state['base_html'] = get_base_html_content()
         
-    # base_html은 이제 확실히 존재합니다.
     base_html_template = st.session_state['base_html'] 
     
     # 2. current_html 초기화 및 유효성 검사 (안전 장치 강화)
@@ -482,60 +565,68 @@ def render_home_page():
         current_content = initial_html # 렌더링에 사용할 변수 업데이트
 
     # 3. HTML 컴포넌트 렌더링
-    # current_content는 이제 유효한 문자열임이 보장됩니다.
     component_value = components.html(
-        current_content, # 오류 발생 지점
+        current_content, 
         height=1200, 
         scrolling=True,
         key="home_filter_component"
     )
 
-    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신)
+    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신 및 로그아웃)
     if component_value:
         message = component_value
 
-        if isinstance(message, dict) and message.get('type') == 'GET_INITIAL_DATA':
-            
-            # HTML로 보낼 데이터 구조
-            data_to_send = {
-                "type": "PROGRAM_DATA",
-                "programs": MOCK_PROGRAMS,
-                "regions": REGIONS,
-                "fields": FIELDS
-            }
-            
-            # 5. 데이터 전송을 위한 동적 스크립트 생성
-            data_json = json.dumps(data_to_send)
-            
-            streamlit_data_script = f"""
-            <script>
-                // 데이터 주입 스크립트: Streamlit Python 백엔드에서 받은 데이터를 JS로 주입
-                const dataPayload = {data_json};
-                // 스크립트 로드 즉시 데이터를 전송하여 JavaScript가 처리하도록 합니다.
-                window.parent.postMessage(dataPayload, '*'); 
-            </script>
-            """
-            
-            # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
-            new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
-            
-            # 7. 세션 상태 업데이트 및 재실행 요청
-            st.session_state['current_html'] = new_html
-            st.rerun()
+        if isinstance(message, dict):
+            if message.get('type') == 'GET_INITIAL_DATA':
+                
+                # HTML로 보낼 데이터 구조
+                data_to_send = {
+                    "type": "PROGRAM_DATA",
+                    "programs": MOCK_PROGRAMS,
+                    "regions": REGIONS,
+                    "fields": FIELDS
+                }
+                
+                # 5. 데이터 전송을 위한 동적 스크립트 생성
+                data_json = json.dumps(data_to_send)
+                
+                streamlit_data_script = f"""
+                <script>
+                    // 데이터 주입 스크립트
+                    const dataPayload = {data_json};
+                    window.parent.postMessage(dataPayload, '*'); 
+                </script>
+                """
+                
+                # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
+                new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
+                
+                # 7. 세션 상태 업데이트 및 재실행 요청
+                st.session_state['current_html'] = new_html
+                st.rerun()
 
-# --- 4. 메인 실행 블록 ---
+            elif message.get('type') == 'LOGOUT':
+                # 로그아웃 요청 처리
+                st.session_state['user_authenticated'] = False
+                # current_html 상태를 지워 다음에 홈 화면이 로드될 때 새로 데이터를 요청하도록 합니다.
+                if 'current_html' in st.session_state:
+                    del st.session_state['current_html']
+                st.rerun()
+
+
+# --- 6. 메인 실행 블록 ---
 if __name__ == '__main__':
     st.set_page_config(layout="wide")
 
     # 인증 세션 상태 설정
     if 'user_authenticated' not in st.session_state:
-        # **[로그인 플로우 수정]**
-        # 이전에 True로 강제 설정되어 홈 화면이 보였으나, 이제는 기본값을 False로 설정하여
-        # 새로운 세션에서는 로그인 플로우(else 블록)가 작동하도록 합니다.
+        # 새로운 세션 시작 시 미인증 상태로 설정
         st.session_state['user_authenticated'] = False 
 
+    # 인증 상태에 따라 다른 페이지 렌더링
     if st.session_state.get('user_authenticated'):
-        st.title("잡스트레블링 - 홈 (Streamlit)")
+        st.title("잡스트레블링 - 홈")
         render_home_page()
     else:
-        st.error("🔒 이 앱은 인증이 필요합니다. 로그인 페이지로 이동하세요.")
+        # 미인증 상태일 때 로그인 페이지를 렌더링합니다.
+        render_login_page()
