@@ -48,7 +48,8 @@
         /* 별점 스타일 */
         .rating {
             display: inline-block;
-            direction: rtl; /* 별을 오른쪽에서 왼쪽으로 정렬하여 클릭하기 쉽게 */
+            direction: rtl; 
+            unicode-bidi: bidi-override; /* 별 역순으로 배치 */
         }
         .rating input {
             display: none;
@@ -83,6 +84,7 @@
             <!-- 1. 체험 정보 -->
             <div class="mb-6">
                 <label class="block text-lg text-gray-700 font-semibold mb-1">체험 프로그램/기관명</label>
+                <!-- required 속성 유지 -->
                 <input type="text" id="programName" class="form-input" required placeholder="예: 구글 코리아 견학, IT 개발자 직무 체험"/>
             </div>
 
@@ -101,8 +103,8 @@
             <div class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                 <label class="block text-lg text-gray-700 font-semibold mb-3">체험 만족도 (별점 5점 만점)</label>
                 <div class="rating">
-                    <!-- 별점은 5점부터 1점 순으로 배치해야 CSS의 ~ (틸드) 선택자가 올바르게 작동합니다. -->
-                    <input type="radio" id="star5" name="rating" value="5" required/>
+                    <!-- 별점 라디오 버튼: required 제거하고 JS에서 유효성 검사 -->
+                    <input type="radio" id="star5" name="rating" value="5"/>
                     <label for="star5" title="매우 만족 (5점)">★</label>
                     <input type="radio" id="star4" name="rating" value="4"/>
                     <label for="star4" title="만족 (4점)">★</label>
@@ -142,10 +144,11 @@
 
         // Streamlit 페이지 이동 함수
         function navigateTo(page) {
+             // 'view_reports' 또는 'home' 페이지로 이동하도록 Streamlit에 메시지 전달
              window.parent.postMessage({ type: 'streamlit:setComponentValue', value: page }, '*');
         }
 
-        // 2. 메시지 표시 함수 (이 함수는 성공 후 로직에서 사용되지 않고, 에러 표시용으로 남겨둡니다)
+        // 2. 메시지 표시 함수
         function showMessage(text, type) {
             messageBox.textContent = text;
             messageBox.className = `p-4 mb-4 rounded-lg text-sm`;
@@ -194,11 +197,21 @@
             submitBtn.textContent = '저장 중...';
             messageBox.classList.add('hidden'); // 기존 메시지 숨기기
             
-            // 별점 값 가져오기
+            // 별점 값 가져오기 (필수 검사)
             const ratingValue = form.querySelector('input[name="rating"]:checked')?.value;
             
             if (!ratingValue) {
-                showMessage('체험 만족도(별점)를 선택해 주세요.', 'error');
+                showMessage('체험 만족도(별점)를 반드시 선택해 주세요.', 'error'); // 명확한 오류 메시지
+                submitBtn.disabled = false;
+                submitBtn.textContent = '리포트 저장하기';
+                return;
+            }
+
+            // 필수 입력 필드 확인 (프로그램명, 일자, 내용)
+            if (!document.getElementById('programName').value || 
+                !document.getElementById('experienceDate').value || 
+                !document.getElementById('reportContent').value) {
+                showMessage('체험 프로그램명, 일자, 내용 등 필수 정보를 모두 입력해 주세요.', 'error');
                 submitBtn.disabled = false;
                 submitBtn.textContent = '리포트 저장하기';
                 return;
@@ -223,9 +236,9 @@
                 // 새로운 문서 추가
                 await addDoc(collection(db, collectionPath), newReport);
                 
-                // --- 저장 성공 후 로직 변경 (요청 사항 반영) ---
+                // --- 저장 성공 후 로직 (이전 요청 사항 반영) ---
                 form.style.display = 'none'; // 폼 숨기기
-                submitBtn.disabled = false; // 버튼 상태 해제 (화면 전환용 버튼에 영향 없도록)
+                submitBtn.disabled = false; 
                 
                 // 성공 메시지 및 버튼 표시
                 messageBox.className = 'p-6 mb-4 rounded-xl text-lg bg-green-50 text-green-700 block text-center';
