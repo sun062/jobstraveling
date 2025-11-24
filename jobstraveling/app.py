@@ -5,11 +5,8 @@ import json
 from datetime import date, datetime 
 
 # --- Firebase SDK Admin (Python) 사용을 위한 Stubs ---
-# Python에서 Firestore에 접근하기 위해 가상의 함수를 정의합니다.
-# 실제 Firebase Admin SDK를 가져올 수 없으므로, on-premise 환경에서는
-# 이 부분이 실제 데이터베이스 접근 로직으로 대체됩니다.
 # 이 환경에서는 Streamlit이 백엔드 역할을 하므로, `st.session_state`에
-# 임시 데이터베이스 스텁을 만들어 사용하겠습니다.
+# 임시 데이터베이스 스텁을 만들어 사용하겠습니다. (기존 로직 유지)
 if 'firestore_reports' not in st.session_state:
     st.session_state.firestore_reports = {} # {userId: [report1, report2, ...]}
 
@@ -31,15 +28,12 @@ PAGE_ADD_PROGRAM = 'add_program'
 PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지
 PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지
 
-# 세션 상태 초기화
+# 세션 상태 초기화 (Mock 데이터 포함)
 if 'current_page' not in st.session_state:
     st.session_state.current_page = PAGE_LOGIN
 if 'user_data' not in st.session_state:
     st.session_state.user_data = None # 로그인한 사용자 정보
-if 'is_auth_ready' not in st.session_state:
-    st.session_state.is_auth_ready = False 
 if 'mock_user' not in st.session_state:
-    # 기본 Mock 사용자 정보 설정 (관리자 계정)
     st.session_state.mock_user = {
         'email': 'admin@jobtrekking.com', 
         'password': 'adminpassword',
@@ -49,7 +43,6 @@ if 'mock_user' not in st.session_state:
         'birthDate': '2000-01-01',
         'isAdmin': True 
     }
-# 일반 사용자 Mock 계정 
 if 'mock_user_normal' not in st.session_state:
     st.session_state.mock_user_normal = {
         'email': 'user@jobtrekking.com', 
@@ -70,8 +63,7 @@ if 'report_saved_successfully' not in st.session_state:
 # --- Firebase Stubs (Python Backend) ---
 
 def get_current_user_id():
-    """Mock User ID 반환. 실제 환경에서는 __initial_auth_token을 파싱해야 합니다."""
-    # 간단히 Mock 사용자 이메일을 ID로 사용합니다.
+    """Mock User ID 반환."""
     return st.session_state.user_data.get('email') if st.session_state.user_data else None
 
 def save_report_to_firestore(report_data):
@@ -83,16 +75,13 @@ def save_report_to_firestore(report_data):
     if not user_id:
         return False, "사용자 인증 정보를 찾을 수 없습니다."
 
-    # 필수 필드 유효성 검사 (Streamlit 버튼에서 이미 체크하지만, 백엔드에서도 최종 확인)
+    # 필수 필드 유효성 검사 
     if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
         return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
     # Firestore Data Structure Stub
     if user_id not in st.session_state.firestore_reports:
         st.session_state.firestore_reports[user_id] = []
-    
-    # 날짜 문자열을 Date 객체로 변환하여 저장
-    # 여기서 Firebase에 데이터를 저장하는 로직이 실행됩니다.
     
     report_data['id'] = str(len(st.session_state.firestore_reports[user_id]) + 1) # 임시 ID 부여
     report_data['createdAt'] = datetime.now().isoformat()
@@ -102,11 +91,9 @@ def save_report_to_firestore(report_data):
     return True, ""
 
 
-# --- 2. HTML 파일 로드 함수 (수정된 부분) ---
+# --- 2. HTML 파일 로드 함수 ---
 def read_html_file(file_name):
     """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
-    # ⭐️ 경로 문제 해결을 위해 현재 스크립트의 절대 경로를 기준으로 파일을 찾습니다.
-    # __file__은 현재 실행 중인 파일(app.py)의 경로를 나타냅니다.
     base_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(base_dir, 'htmls', file_name)
     
@@ -114,7 +101,7 @@ def read_html_file(file_name):
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # 파일이 없을 경우, 오류 메시지를 표시하여 사용자가 경로 문제를 인지할 수 있도록 돕습니다.
+        # 이전에 제공된 파일들이 없으면 에러 발생
         st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
         return ""
     except Exception as e:
@@ -132,7 +119,6 @@ def navigate(page):
 def render_login_page():
     """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("로그인")
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.form("login_form", clear_on_submit=False):
@@ -150,21 +136,17 @@ def render_login_page():
                     st.error("이메일과 비밀번호를 모두 입력해 주세요.")
                     return
                 
-                # Mock 로그인 처리 (관리자 또는 일반 사용자 계정 대조)
                 user_to_check = None
                 if email == st.session_state.mock_user['email']:
                     user_to_check = st.session_state.mock_user
                 elif email == st.session_state.mock_user_normal['email']:
                     user_to_check = st.session_state.mock_user_normal
-                elif email == st.session_state.mock_user.get('email', 'N/A') and password == st.session_state.mock_user.get('password', 'N/A'):
-                    user_to_check = st.session_state.mock_user 
 
                 if (user_to_check and 
                     user_to_check.get('password') == password):
                     
                     st.success("로그인 성공! 홈 화면으로 이동합니다.")
                     
-                    # Mock 사용자 데이터에서 민감 정보(password) 제거 후 저장
                     user_data = {**user_to_check}
                     user_data.pop('password', None)
                     st.session_state.user_data = user_data
@@ -177,11 +159,9 @@ def render_login_page():
         if st.button("회원가입", key="navigate_to_signup"):
             navigate(PAGE_SIGNUP)
 
-
 def render_signup_page():
     """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("회원가입")
-
     today = date.today()
     min_date = date(2007, 1, 1)
     default_birth_date = min_date
@@ -215,7 +195,6 @@ def render_signup_page():
             elif birth_date < min_date or birth_date > today:
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
-                # 일반 사용자 Mock 데이터 저장 (이 정보로 로그인을 시도할 수 있게 됩니다)
                 st.session_state.mock_user_normal = {
                     'email': email,
                     'password': password, 
@@ -223,7 +202,7 @@ def render_signup_page():
                     'classNumber': class_number,
                     'studentName': student_name,
                     'birthDate': birth_date.strftime("%Y-%m-%d"),
-                    'isAdmin': False # 일반 사용자
+                    'isAdmin': False
                 }
                 
                 st.success(f"{student_name}님, 회원가입이 완료되었습니다! 이제 이 정보로 로그인해 주세요.")
@@ -234,32 +213,25 @@ def render_signup_page():
     if st.button("로그인 화면으로 돌아가기", key="back_to_login_btn"):
         navigate(PAGE_LOGIN)
 
-
 def render_home_page():
-    """홈 화면을 렌더링합니다. (HTML 컴포넌트 사용)"""
+    """홈 화면을 렌더링합니다. (기존 구조 복원)"""
     user_info = st.session_state.user_data
     user_name = user_info.get('studentName', '사용자')
     is_admin = user_info.get('isAdmin', False)
 
-    # 1. 제목과 '잡스리포트 기록하기', '나의 기록 보기' 버튼을 나란히 배치 (요청 사항)
-    col_title, col_button_add, col_button_view = st.columns([3, 1, 1])
+    st.title("🗺️ Job-Trekking 홈 💼")
+    st.write(f"환영합니다, **{user_name}**님!")
 
-    with col_title:
-        st.title("🗺️ Job-Trekking 홈 💼")
-    
-    with col_button_add:
-        # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
-        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
-        if st.button("📝 잡스리포트 기록하기", key="navigate_to_report_from_home"):
-            navigate(PAGE_ADD_REPORT) 
+    # 페이지 이동 버튼들 (Streamlit 네이티브 버튼)
+    if st.button("📝 잡스리포트 기록하기", key="navigate_to_report"):
+        navigate(PAGE_ADD_REPORT) 
+        
+    if st.button("📖 나의 기록 보기", key="navigate_to_view_reports"):
+        navigate(PAGE_VIEW_REPORTS) # 나의 기록 보기 페이지로 이동
 
-    with col_button_view: 
-        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
-        if st.button("📖 나의 기록 보기", key="navigate_to_view_reports_from_home"):
-            navigate(PAGE_VIEW_REPORTS) # 나의 기록 보기 페이지로 이동
+    if st.button("🔎 프로그램 목록 보기", key="navigate_to_program_list"):
+        navigate(PAGE_PROGRAM_LIST) # 프로그램 목록 보기 페이지로 이동
 
-    st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
-    
     # 관리자 기능 버튼 추가
     if is_admin:
         if st.button("새 프로그램 추가 (관리자 전용)", key="add_program_btn"):
@@ -276,8 +248,8 @@ def render_home_page():
         
         components.html(
             html_content,
-            height=700,
-            scrolling=True,
+            height=300, # 높이를 줄여서 Streamlit 버튼과 잘 보이게 조정
+            scrolling=False,
         )
     
     st.markdown("---")
@@ -286,14 +258,13 @@ def render_home_page():
         navigate(PAGE_LOGIN)
 
 def render_program_list_page():
-    """Firestore에서 프로그램을 로드하고 표시하는 페이지를 렌더링합니다."""
+    """프로그램 목록 페이지 (기존 로직 유지)"""
     st.title("진로 프로그램 검색 결과 🔎")
     st.info("이 페이지의 프로그램 목록은 Firebase Firestore에서 실시간으로 로드됩니다.")
 
     program_list_html = read_html_file('program_list.html')
     
     if program_list_html:
-        # Streamlit 컴포넌트 내에서 사용할 Firebase 설정 변수 주입
         program_list_html = program_list_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
         program_list_html = program_list_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
         program_list_html = program_list_html.replace('{{APP_ID}}', appId)
@@ -309,7 +280,7 @@ def render_program_list_page():
         navigate(PAGE_HOME)
 
 def render_add_program_page():
-    """관리자가 새 프로그램을 Firestore에 추가할 수 있는 폼을 렌더링합니다."""
+    """새 프로그램 추가 페이지 (기존 로직 유지)"""
     if not st.session_state.user_data or not st.session_state.user_data.get('isAdmin', False):
         st.error("접근 권한이 없습니다.")
         navigate(PAGE_HOME)
@@ -337,85 +308,75 @@ def render_add_program_page():
 
 def render_add_report_page():
     """
-    HTML 컴포넌트로 폼을 표시하고, Streamlit 버튼으로 저장 처리를 수행합니다.
+    HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
     """
     st.title("잡스리포트 기록하기 📝")
     
-    # 1. HTML 컴포넌트 렌더링 (폼 입력 담당)
+    # 1. HTML 컴포넌트 렌더링 (폼 입력만 담당)
     add_report_html = read_html_file('add_report.html')
     
-    # components.html에는 key 인수를 전달할 수 없습니다. key 인수를 제거합니다.
+    # components.html이 반환하는 값은 HTML에서 Streamlit.setComponentValue()로 전달한 값입니다.
+    # 이제 이 값은 실시간으로 reportData만 포함합니다.
     component_value = components.html(
         html=add_report_html, 
-        height=650,
+        height=700, 
         scrolling=True,
+        key="report_form_component"
     )
 
-
-    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
-    # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
-    # component_value가 딕셔너리 형태이고 'reportData' 키를 포함하는지 확인합니다.
+    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
+    current_data = None
     if isinstance(component_value, dict) and 'reportData' in component_value:
-        # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
-        st.session_state.current_report_data = component_value['reportData']
-        # 디버깅을 위해 현재 수신된 데이터를 출력
-        # st.json(st.session_state.current_report_data) 
-    
-    # 3. Streamlit 버튼 배치 (저장 실행 담당)
-    st.markdown("---")
-    
-    # 저장 성공 후 버튼은 숨기고, 성공 메시지를 표시합니다.
-    if st.session_state.get('report_saved_successfully', False):
-        # 저장 성공 후 활동 선택 버튼 표시
-        st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
-        
-        # NOTE: 리포트가 저장된 후에는 폼 데이터를 다시 초기화해야 다음 기록 시 오류가 없습니다.
-        st.session_state.current_report_data = None 
+        current_data = component_value['reportData']
+        # 데이터를 세션 상태에 저장하여 Streamlit 버튼 클릭 시 사용
+        st.session_state.current_report_data = current_data 
 
+    st.markdown("---")
+
+    # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
+    # 이 버튼을 클릭하면 Streamlit 앱 전체가 다시 실행되며, 이 로직이 실행됩니다.
+    if st.button("🚀 리포트 저장하기", key="submit_report_button"):
+        
+        # 버튼 클릭 시, HTML 컴포넌트가 마지막으로 전달한 데이터를 사용
+        data_to_save = st.session_state.get('current_report_data')
+
+        # 필수 필드 유효성 검사
+        is_valid = (
+            data_to_save and 
+            data_to_save.get('programName') and 
+            data_to_save.get('experienceDate') and 
+            data_to_save.get('rating') is not None and 
+            data_to_save.get('reportContent')
+        )
+
+        if is_valid:
+            
+            success, message = save_report_to_firestore(data_to_save)
+            
+            if success:
+                st.session_state.report_saved_successfully = True
+                # 저장 후 현재 폼 데이터를 초기화
+                st.session_state.current_report_data = None 
+                st.rerun() # 성공 메시지를 표시하기 위해 다시 실행
+            else:
+                st.error(f"⚠️ 리포트 저장 실패: {message}")
+        else:
+            st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
+
+
+    # 4. 저장 성공 후 상태 (성공 메시지 및 네비게이션 버튼)
+    if st.session_state.get('report_saved_successfully', False):
+        st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
+        # 성공 메시지를 한 번만 표시하도록 상태 초기화
+        st.session_state.report_saved_successfully = False 
+        
         col_view, col_home = st.columns(2)
         with col_view:
             if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
-                st.session_state.report_saved_successfully = False # 상태 초기화
                 navigate(PAGE_VIEW_REPORTS)
         with col_home:
             if st.button("메인 화면으로 돌아가기", key="post_save_home"):
-                st.session_state.report_saved_successfully = False # 상태 초기화
                 navigate(PAGE_HOME)
-
-    else:
-        # 저장 전 상태에서는 Streamlit 버튼을 표시합니다.
-        if st.button("🚀 리포트 저장하기", key="submit_report_to_python", type="primary"):
-            # 버튼 클릭 시 저장 로직 실행
-            
-            # current_report_data를 세션 상태에서 가져옵니다.
-            current_data = st.session_state.get('current_report_data')
-            
-            # 필수 필드 체크: programName, experienceDate, rating, reportContent
-            is_valid = (
-                current_data and 
-                current_data.get('programName') and 
-                current_data.get('experienceDate') and 
-                current_data.get('rating') is not None and 
-                current_data.get('reportContent')
-            )
-
-            if is_valid:
-                
-                # 저장 로직 실행
-                success, message = save_report_to_firestore(current_data)
-                
-                if success:
-                    st.session_state.report_saved_successfully = True
-                    st.session_state.current_report_data = None # 임시 데이터 초기화
-                    st.rerun() # 성공 메시지와 버튼을 표시하기 위해 페이지 새로고침
-                else:
-                    st.error(f"⚠️ 리포트 저장 실패: {message}")
-            else:
-                # 데이터가 준비되지 않았을 경우 (HTML에서 데이터가 제대로 안 넘어온 경우)
-                st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
-                # st.json({"Debug: current_data is": current_data}) # 디버깅용
-                # **해결책:** 이 오류가 뜨면 사용자는 폼의 모든 내용을 다시 확인하고,
-                # 폼에서 마우스 클릭이나 키보드 입력을 통해 데이터 전송(JS)을 다시 트리거해야 합니다.
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
@@ -424,7 +385,7 @@ def render_add_report_page():
 def render_view_reports_page():
     """
     사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다.
-    Streamlit Python 백엔드의 임시 저장소(`firestore_reports`)를 사용하도록 변경합니다.
+    (간결한 Streamlit 네이티브 디자인으로 복구)
     """
     st.title("나의 진로 체험 기록 📖")
     st.info("이 페이지에서는 지금까지 작성한 잡스리포트 목록을 볼 수 있습니다. (개인 기록)")
@@ -438,16 +399,14 @@ def render_view_reports_page():
     all_reports = st.session_state.firestore_reports.get(user_id, [])
     
     if not all_reports:
-        st.markdown("""
-            <div class="text-center text-gray-500 p-10 bg-white rounded-xl shadow-lg border border-dashed border-gray-300 mt-10">
-                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <h3 class="mt-2 text-lg font-medium text-gray-900">작성된 리포트가 없습니다</h3>
-                <p class="mt-1 text-sm text-gray-500">지금 바로 잡스리포트를 작성해 보세요!</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            "<div style='text-align: center; padding: 20px; background-color: #f0f0f5; border-radius: 8px;'>"
+            "<strong>작성된 리포트가 없습니다.</strong><br>지금 바로 '잡스리포트 기록하기'를 통해 기록을 시작해 보세요!"
+            "</div>", unsafe_allow_html=True
+        )
         
     else:
-        # 최신순 정렬 (createdAt은 ISO 문자열이므로 역순 정렬)
+        # 최신순 정렬
         sorted_reports = sorted(all_reports, key=lambda x: x['createdAt'], reverse=True)
         
         st.sidebar.header("리포트 목록")
@@ -455,32 +414,40 @@ def render_view_reports_page():
 
         # Streamlit Selectbox를 사용하여 리포트 선택
         report_titles = [f"{r['experienceDate']} - {r['programName']}" for r in sorted_reports]
-        selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
-
-        # 선택된 리포트 찾기
-        selected_report_index = report_titles.index(selected_title)
-        selected_report = sorted_reports[selected_report_index]
-
-        # 5. 별점 렌더링 함수
-        def get_rating_stars(rating):
-            return "★" * rating + "☆" * (5 - rating)
-
-        # 상세 리포트 뷰 (선택된 리포트 표시)
-        st.markdown("---")
-        st.subheader(f"선택된 리포트: {selected_report['programName']}")
         
-        col_date, col_field = st.columns(2)
-        with col_date:
-            st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
-        with col_field:
-            st.markdown(f"**분야:** `{selected_report['jobField']}`")
+        # 선택 목록이 비어있지 않은 경우에만 selectbox 표시
+        if report_titles:
+            selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
 
-        st.markdown("---")
-        st.markdown("### 체험 만족도")
-        st.markdown(f"<p style='font-size: 2rem; color: #fbbf24;'>{get_rating_stars(selected_report['rating'])}</p>", unsafe_allow_html=True)
-        
-        st.markdown("### 소감 및 내용")
-        st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
+            # 선택된 리포트 찾기
+            selected_report_index = report_titles.index(selected_title)
+            selected_report = sorted_reports[selected_report_index]
+
+            # 5. 별점 렌더링 함수
+            def get_rating_stars(rating):
+                # 별점은 1~5 사이의 정수여야 함
+                rating = max(0, min(5, rating))
+                return "★" * rating + "☆" * (5 - rating)
+
+            # 상세 리포트 뷰 (선택된 리포트 표시 - 깔끔한 Streamlit 디자인)
+            st.markdown("---")
+            st.subheader(f"✅ {selected_report['programName']}")
+            
+            col_date, col_field = st.columns(2)
+            with col_date:
+                st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
+            with col_field:
+                st.markdown(f"**분야:** `{selected_report['jobField'] or '미입력'}`")
+
+            st.markdown("---")
+            st.markdown("#### 체험 만족도")
+            st.markdown(f"<p style='font-size: 2rem; color: #fbbf24;'>{get_rating_stars(selected_report.get('rating', 0))}</p>", unsafe_allow_html=True)
+            
+            st.markdown("#### 소감 및 내용")
+            st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap; border: 1px solid #ddd;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
+        else:
+             st.info("선택할 수 있는 리포트가 없습니다.")
+
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_view_reports"):
@@ -503,10 +470,9 @@ elif st.session_state.current_page == PAGE_ADD_PROGRAM and current_user_authenti
     render_add_program_page()
 elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated:
     render_add_report_page()
-elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated: # 신규 페이지 처리
+elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated:
     render_view_reports_page()
 else:
-    # 인증되지 않은 상태에서 접근 시 로그인 페이지로 리다이렉션
     st.session_state.current_page = PAGE_LOGIN
     navigate(PAGE_LOGIN)
 
