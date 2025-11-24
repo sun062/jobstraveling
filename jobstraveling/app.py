@@ -99,7 +99,11 @@ def read_html_file(file_name):
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+            content = f.read()
+            # 파일이 성공적으로 로드되었는지 확인하는 로그 추가
+            if not content:
+                st.warning(f"파일이 성공적으로 로드되었으나 내용이 비어 있습니다: 'htmls/{file_name}'")
+            return content
     except FileNotFoundError:
         st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요. 해당 페이지는 표시되지 않습니다.")
         return "" # 파일을 찾지 못하면 빈 문자열 반환
@@ -308,7 +312,7 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
-    (파일 로드 안정성 개선)
+    (파일 로드 안정성 및 로깅 개선)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -317,8 +321,8 @@ def render_add_report_page():
     
     component_value = None
 
-    # HTML 파일이 제대로 로드되었을 경우에만 components.html 호출
-    if add_report_html: 
+    # HTML 파일이 유효한 내용(비어있지 않은 문자열)을 가지고 있을 경우에만 components.html 호출
+    if add_report_html and add_report_html.strip(): 
         component_value = components.html(
             html=add_report_html, 
             height=700, 
@@ -326,8 +330,10 @@ def render_add_report_page():
             key="report_form_component"
         )
     else:
-        # 파일 로드 실패 시, 사용자에게 명확히 알림
-        st.warning("⚠️ 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없습니다. 파일을 확인해주세요.")
+        # 파일 로드 실패 시, 사용자에게 명확히 알림 (디버깅 정보 추가)
+        st.warning(f"⚠️ 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없거나 내용이 비어 있습니다. (길이: {len(add_report_html) if add_report_html else 0}) 파일을 확인해주세요.")
+        # 만약 HTML 컴포넌트를 렌더링하지 못했다면, 아래의 데이터 처리도 불가능하므로 메시지를 추가
+        st.info("HTML 폼이 표시되지 않아 리포트 저장 기능을 사용할 수 없습니다.")
 
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
@@ -336,6 +342,10 @@ def render_add_report_page():
         current_data = component_value['reportData']
         # 데이터를 세션 상태에 저장하여 Streamlit 버튼 클릭 시 사용
         st.session_state.current_report_data = current_data 
+    
+    # 디버깅 정보: 현재 세션에 저장된 폼 데이터 확인
+    # st.sidebar.json(st.session_state.get('current_report_data'))
+
 
     st.markdown("---")
 
