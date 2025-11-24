@@ -69,11 +69,11 @@
         <!-- 현재 검색 조건 표시 및 초기화 버튼 -->
         <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
              <div id="currentFilters" class="text-sm text-white font-light">
-                <!-- 선택된 필터가 여기에 표시됩니다. -->
+                 <!-- 선택된 필터가 여기에 표시됩니다. -->
              </div>
              <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition text-white">
-                초기화
-            </button>
+                 초기화
+             </button>
         </div>
     </header>
 
@@ -133,25 +133,15 @@
         let appId;
         let isFirebaseReady = false; 
         
+        // --- 데이터 변수 (백엔드에서 수신) ---
+        let Programs = []; // 실제 프로그램 목록이 백엔드에서 채워짐
+        let Regions = []; // 백엔드에서 지역 목록이 채워짐
+        let Fields = []; // 백엔드에서 분야 목록이 채워짐
+
         // --- 상태 관리 변수 ---
         let currentRegion = ""; 
         let currentFields = []; 
         
-        // Mock 데이터: 견학 및 진로 프로그램 목록 (필터링을 위해 'fields' 추가)
-        const MockPrograms = [
-            { id: 1, title: "서울시 IT 미래 인재 캠프", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울시+IT+캠프", img: "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", description: "IT 기술 체험 및 현직자 멘토링 프로그램.", fields: ["AI/IT", "과학/기술"] },
-            { id: 2, title: "부산항만 공사 견학", region: "부산", type: "견학", url: "https://www.google.com/search?q=부산항만+견학", img: "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", description: "대한민국 최대 항만의 물류 흐름 체험.", fields: ["운송/물류", "사회/인문"] },
-            { id: 3, title: "경기 AI 로봇 체험관", region: "경기", type: "진로", url: "https://www.google.com/search?q=경기+AI+로봇", img: "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", description: "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", fields: ["AI/IT", "과학/기술", "기계/제조"] },
-            { id: 4, title: "광주 자동차 미래 산업 탐방", region: "광주", type: "견학", url: "https://www.google.com/search?q=광주+자동차+탐방", img: "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", description: "친환경 자동차 생산 라인 및 연구소 방문.", fields: ["기계/제조", "과학/기술"] },
-            { id: 5, title: "강원 환경보호 교육 캠페인", region: "강원", type: "진로", url: "https://www.google.com/search?q=강원+환경+캠페인", img: "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", description: "지속 가능한 환경과 관련된 직업군 탐색.", fields: ["생명/환경", "사회/인문"] },
-            { id: 6, title: "서울 고궁 문화 해설사 체험", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울+문화+해설사", img: "https://placehold.co/400x200/5a32a8/ffffff?text=Culture+Guide", description: "역사 해설 및 문화재 보존 체험.", fields: ["예술/문화", "사회/인문"] },
-            { id: 7, title: "대전 나노 반도체 특강", region: "대전", type: "진로", url: "https://www.google.com/search?q=대전+반도체+특강", img: "https://placehold.co/400x200/3498db/ffffff?text=Semiconductor", description: "미래 기술의 핵심, 반도체 제조 과정 이해.", fields: ["과학/기술", "AI/IT", "화학"] },
-        ];
-        
-        // 지역 및 분야 데이터
-        const Regions = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
-        const Fields = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"];
-
         // --- Firebase 초기화 함수 ---
         async function initializeFirebase() {
             try {
@@ -174,13 +164,14 @@
                 isFirebaseReady = true; 
                 console.log("Firebase initialized successfully. User ID:", userId);
                 
-                // Firebase 초기화 완료 후 페이지 로드 로직 실행
+                // Firebase 초기화 완료 후 페이지 로드 로직 실행 및 데이터 요청
                 if (typeof onPageLoad === 'function') {
                     onPageLoad(); 
                 }
 
             } catch (error) {
                 console.error("Firebase initialization or sign-in failed:", error);
+                showMessage("Firebase 초기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
             }
         }
         
@@ -207,12 +198,48 @@
             }
         }
 
-        // Streamlit 관련 함수
+        // --- 백엔드 (app.py) 통신 관련 함수 ---
+        
+        // Streamlit에 초기 데이터 요청
+        function requestInitialData() {
+            parent.postMessage({ type: 'GET_INITIAL_DATA' }, '*');
+        }
+
+        // Streamlit에 로그아웃 요청
         function requestStreamlitLogout() {
              showMessage('로그아웃 되었습니다.', () => {
                  parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
              });
         }
+        
+        // 백엔드에서 메시지를 수신하는 리스너
+        window.addEventListener('message', (event) => {
+            // Streamlit에서 보낸 메시지인 경우에만 처리
+            if (event.source !== parent) return;
+
+            const data = event.data;
+            if (typeof data !== 'object' || data === null) return;
+
+            switch (data.type) {
+                case 'PROGRAM_DATA':
+                    console.log("Received program data from backend.");
+                    Programs = data.programs || [];
+                    Regions = data.regions || [];
+                    Fields = data.fields || [];
+                    
+                    // 데이터 수신 후 UI 업데이트
+                    createRegionOptions();
+                    createFieldOptions();
+                    filterPrograms();
+                    break;
+                case 'ERROR_MESSAGE':
+                    showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
+                    break;
+                default:
+                    // 다른 유형의 메시지는 무시
+                    break;
+            }
+        });
         
         window.onload = initializeFirebase;
         
@@ -230,12 +257,12 @@
             const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
             // 분야 태그 문자열 생성
-            const fieldTags = program.fields.map(field => 
+            const fieldTags = (program.fields || []).map(field => 
                 `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
             ).join('');
 
             card.innerHTML = `
-                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Placeholder';" alt="${program.title}" class="w-full h-40 object-cover">
+                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${program.title}" class="w-full h-40 object-cover">
                 <div class="p-4 space-y-2">
                     <div class="flex items-center space-x-2">
                         <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
@@ -276,12 +303,12 @@
             const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
             const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
 
-            const filtered = MockPrograms.filter(program => {
+            const filtered = Programs.filter(program => {
                 // 지역 필터링
                 const regionMatch = !regionToFilter || program.region === regionToFilter;
                 
                 // 분야 필터링 (다중 선택된 분야 중 하나라도 프로그램의 분야와 일치하면 통과)
-                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => program.fields.includes(field));
+                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => (program.fields || []).includes(field));
 
                 return regionMatch && fieldMatch;
             });
@@ -311,13 +338,12 @@
             showMessage('검색 조건이 초기화되었습니다.');
         }
 
-        // 페이지 로드 시 전체 프로그램 렌더링 및 UI 초기화
+        // 페이지 로드 시 UI 및 데이터 로직 실행
         window.onPageLoad = function() {
-            // 기본적으로 전체 목록 렌더링
-            filterPrograms(); 
-            // 모달에 지역 및 분야 옵션 생성
-            createRegionOptions();
-            createFieldOptions();
+            // Firebase 인증 후 백엔드에 데이터 요청
+            requestInitialData();
+            // 기본 필터 표시
+            updateFilterDisplay();
         }
         
         // --- 모달 관련 로직 ---
@@ -325,6 +351,7 @@
         // 지역 모달 생성
         function createRegionOptions() {
             const container = document.getElementById('regionOptions');
+            container.innerHTML = ''; // 기존 옵션 초기화
             Regions.forEach(region => {
                 const button = document.createElement('button');
                 button.textContent = region;
@@ -344,8 +371,8 @@
 
         // 지역 모달 표시/숨기기
         window.showRegionModal = function() {
-            if (!isFirebaseReady) {
-                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+            if (!isFirebaseReady || Regions.length === 0) {
+                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
                  return;
             }
             document.getElementById('regionModal').classList.remove('hidden');
@@ -358,6 +385,7 @@
         // 분야 모달 생성
         function createFieldOptions() {
             const container = document.getElementById('fieldOptions');
+            container.innerHTML = ''; // 기존 옵션 초기화
             Fields.forEach(field => {
                 const button = document.createElement('button');
                 button.textContent = field;
@@ -390,8 +418,8 @@
         
         // 분야 모달 표시/숨기기
         window.showFieldModal = function() {
-            if (!isFirebaseReady) {
-                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+            if (!isFirebaseReady || Fields.length === 0) {
+                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
                  return;
             }
             // 모달 열 때 현재 선택된 상태를 반영하여 태그 클래스 업데이트
