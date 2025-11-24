@@ -241,26 +241,22 @@ def render_home_page():
     user_name = user_info.get('studentName', '사용자')
     is_admin = user_info.get('isAdmin', False)
 
-    # 1. 제목과 '잡스리포트 기록하기', '나의 기록 보기', '프로그램 목록 보기' 버튼을 나란히 배치 (수정된 부분)
-    col_title, col_button_add, col_button_view, col_button_list = st.columns([2.5, 1, 1, 1])
+    # 1. 제목과 '잡스리포트 기록하기', '나의 기록 보기' 버튼을 나란히 배치 (요청 사항)
+    col_title, col_button_add, col_button_view = st.columns([3, 1, 1])
 
     with col_title:
         st.title("🗺️ Job-Trekking 홈 💼")
     
-    # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
-    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
-
     with col_button_add:
-        if st.button("📝 리포트 기록하기", key="navigate_to_report_from_home"):
+        # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
+        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
+        if st.button("📝 잡스리포트 기록하기", key="navigate_to_report_from_home"):
             navigate(PAGE_ADD_REPORT) 
 
     with col_button_view: 
+        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
         if st.button("📖 나의 기록 보기", key="navigate_to_view_reports_from_home"):
             navigate(PAGE_VIEW_REPORTS) # 나의 기록 보기 페이지로 이동
-
-    with col_button_list: 
-        if st.button("🔎 프로그램 목록", key="navigate_to_program_list_from_home"):
-            navigate(PAGE_PROGRAM_LIST) # 프로그램 목록 보기 페이지로 이동
 
     st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
     
@@ -341,7 +337,7 @@ def render_add_program_page():
 
 def render_add_report_page():
     """
-    HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다.
+    HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다. (핵심 수정)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -354,7 +350,7 @@ def render_add_report_page():
         scrolling=True,
     )
 
-    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 처리
+    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 처리 (핵심 수정)
     current_data = None
     is_submitted = False
     
@@ -367,14 +363,12 @@ def render_add_report_page():
     # 3. Streamlit 상태 관리 및 저장 로직 (HTML 제출 신호 대기)
     st.markdown("---")
 
-    # A) 저장 성공 후 상태 (report_saved_successfully 상태는 이전 페이지 리로드로 인해 False로 초기화되었음)
+    # A) 저장 성공 후 상태
     if st.session_state.get('report_saved_successfully', False):
-        # 성공 메시지 표시
+        # 저장 성공 후 버튼은 숨기고, 성공 메시지를 표시합니다.
         st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
         
-        # NOTE: 이 페이지를 벗어나기 전에 False로 초기화하는 것이 중요합니다.
-        # 성공 후 페이지 이동 시 세션 상태가 리셋되지 않으므로, 이 부분을 True로 남겨두면 
-        # 다음 리포트 작성 시에도 계속 성공 메시지가 뜹니다.
+        # 저장 성공 후 상태 초기화 (다음 리포트 작성을 위해 필요)
         st.session_state.report_saved_successfully = False 
         
         col_view, col_home = st.columns(2)
@@ -455,41 +449,32 @@ def render_view_reports_page():
 
         # Streamlit Selectbox를 사용하여 리포트 선택
         report_titles = [f"{r['experienceDate']} - {r['programName']}" for r in sorted_reports]
+        selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
+
+        # 선택된 리포트 찾기
+        selected_report_index = report_titles.index(selected_title)
+        selected_report = sorted_reports[selected_report_index]
+
+        # 5. 별점 렌더링 함수
+        def get_rating_stars(rating):
+            return "★" * rating + "☆" * (5 - rating)
+
+        # 상세 리포트 뷰 (선택된 리포트 표시)
+        st.markdown("---")
+        st.subheader(f"선택된 리포트: {selected_report['programName']}")
         
-        # 선택 목록이 비어있지 않은 경우에만 selectbox 표시
-        if report_titles:
-            selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
+        col_date, col_field = st.columns(2)
+        with col_date:
+            st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
+        with col_field:
+            st.markdown(f"**분야:** `{selected_report['jobField']}`")
 
-            # 선택된 리포트 찾기
-            selected_report_index = report_titles.index(selected_title)
-            selected_report = sorted_reports[selected_report_index]
-
-            # 5. 별점 렌더링 함수
-            def get_rating_stars(rating):
-                return "★" * rating + "☆" * (5 - rating)
-
-            # 상세 리포트 뷰 (선택된 리포트 표시)
-            st.markdown("---")
-            st.subheader(f"선택된 리포트: {selected_report['programName']}")
-            
-            col_date, col_field = st.columns(2)
-            with col_date:
-                st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
-            with col_field:
-                st.markdown(f"**분야:** `{selected_report['jobField']}`")
-
-            st.markdown("---")
-            st.markdown("### 체험 만족도")
-            # 별점은 1~5 사이의 정수여야 함
-            rating = selected_report.get('rating', 0)
-            rating = max(0, min(5, rating))
-            st.markdown(f"<p style='font-size: 2rem; color: #fbbf24;'>{get_rating_stars(rating)}</p>", unsafe_allow_html=True)
-            
-            st.markdown("### 소감 및 내용")
-            st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
-        else:
-             st.info("선택할 수 있는 리포트가 없습니다.")
-
+        st.markdown("---")
+        st.markdown("### 체험 만족도")
+        st.markdown(f"<p style='font-size: 2rem; color: #fbbf24;'>{get_rating_stars(selected_report['rating'])}</p>", unsafe_allow_html=True)
+        
+        st.markdown("### 소감 및 내용")
+        st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_view_reports"):
@@ -520,4 +505,3 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
-
