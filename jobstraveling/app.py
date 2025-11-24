@@ -39,7 +39,7 @@ def get_login_html_base64():
     """
     로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
     """
-    # 템플릿 콘텐츠 (Raw String + 이중 이스케이프 유지)
+    # 템플릿 콘텐츠 (Raw String)
     html_content = r"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -105,13 +105,16 @@ def get_base64_decoder_html():
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
     
-    주의: Streamlit의 포맷팅 충돌을 피하기 위해, f-string 대신 수동 치환을 사용하며,
-    JavaScript 블록의 중괄호를 명시적으로 {{ 와 }}로 이스케이프 처리합니다.
+    주의: Streamlit의 포맷팅 충돌을 피하기 위해, 문자열 포맷팅을 사용하지 않고
+    Base64 문자열을 연결하여 삽입합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # 표준 문자열 템플릿을 정의하고, JavaScript 중괄호를 이스케이프합니다.
-    decoder_html_template = """
+    # 디코더 HTML을 3개 부분으로 나누고 Base64 인코딩된 문자열을 중간에 삽입합니다.
+    # JavaScript 중괄호는 이스케이프가 필요 없습니다.
+    # Python에서 문자열 치환을 일반적인 문자열 연결로 대체합니다.
+    
+    part1 = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -122,41 +125,48 @@ def get_base64_decoder_html():
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
         // 1. Base64로 인코딩된 HTML 콘텐츠를 Python 변수에서 직접 가져와 JavaScript 변수에 할당
-        const encoded = '{ENCODED_CONTENT_PLACEHOLDER}';
+        // 이 부분에서 문자열 연결을 사용하며, Streamlit의 포맷팅 충돌을 방지합니다.
+        const encoded = '"""
+        
+    part2 = encoded_content # Base64로 인코딩된 실제 HTML 데이터
+
+    part3 = """';
         
         // 2. Base64 디코딩 함수 
-        function decodeBase64(base64) {{
+        function decodeBase64(base64) {
             // 브라우저 API를 사용하여 디코딩
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {{
+            for (let i = 0; i < len; i++) {
                 bytes[i] = binary_string.charCodeAt(i);
-            }}
+            }
             return new TextDecoder().decode(bytes);
-        }}
+        }
 
         // 3. 디코딩 및 삽입
-        try {{
+        try {
             const decodedHtml = decodeBase64(encoded);
             // document.body 대신 document 전체의 내용을 덮어씁니다.
             document.open();
             document.write(decodedHtml);
             document.close();
-        }} catch(e) {{
+        } catch(e) {
             // 오류 발생 시 사용자에게 메시지 표시
-            document.getElementById('loading-message').style.color = 'red';
-            document.getElementById('loading-message').textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
+            const msgEl = document.getElementById('loading-message');
+            if (msgEl) {
+                msgEl.style.color = 'red';
+                msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
+            }
             console.error("Base64 decoding failed:", e);
-        }}
+        }
     </script>
 </body>
 </html>
     """
     
-    # 4. 수동으로 Placeholder를 Base64 인코딩된 문자열로 치환합니다.
-    # 이 과정은 Python 레벨에서만 일어나며, Streamlit의 최종 포맷팅 과정을 안전하게 통과합니다.
-    return decoder_html_template.replace('{ENCODED_CONTENT_PLACEHOLDER}', encoded_content)
+    # 세 부분의 문자열을 단순히 연결하여 최종 HTML 문자열을 만듭니다.
+    return part1 + part2 + part3
 
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
@@ -596,7 +606,7 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (JavaScript 중괄호 이스케이프 완료)
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (문자열 연결 방식으로 수정)
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
