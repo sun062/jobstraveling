@@ -101,9 +101,8 @@ def read_html_file(file_name):
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except FileNotFoundError:
-        # 이전에 제공된 파일들이 없으면 에러 발생
-        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
-        return ""
+        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요. 해당 페이지는 표시되지 않습니다.")
+        return "" # 파일을 찾지 못하면 빈 문자열 반환
     except Exception as e:
         st.error(f"파일 읽기 중 예기치 않은 오류 발생: {e}")
         return ""
@@ -309,20 +308,27 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
+    (파일 로드 안정성 개선)
     """
     st.title("잡스리포트 기록하기 📝")
     
     # 1. HTML 컴포넌트 렌더링 (폼 입력만 담당)
     add_report_html = read_html_file('add_report.html')
     
-    # components.html이 반환하는 값은 HTML에서 Streamlit.setComponentValue()로 전달한 값입니다.
-    # 이제 이 값은 실시간으로 reportData만 포함합니다.
-    component_value = components.html(
-        html=add_report_html, 
-        height=700, 
-        scrolling=True,
-        key="report_form_component"
-    )
+    component_value = None
+
+    # HTML 파일이 제대로 로드되었을 경우에만 components.html 호출
+    if add_report_html: 
+        component_value = components.html(
+            html=add_report_html, 
+            height=700, 
+            scrolling=True,
+            key="report_form_component"
+        )
+    else:
+        # 파일 로드 실패 시, 사용자에게 명확히 알림
+        st.warning("⚠️ 리포트 폼 HTML 파일(htmls/add_report.html)을 로드할 수 없습니다. 파일을 확인해주세요.")
+
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 상태 업데이트
     current_data = None
@@ -334,7 +340,6 @@ def render_add_report_page():
     st.markdown("---")
 
     # 3. Streamlit 네이티브 버튼 (저장 로직 트리거)
-    # 이 버튼을 클릭하면 Streamlit 앱 전체가 다시 실행되며, 이 로직이 실행됩니다.
     if st.button("🚀 리포트 저장하기", key="submit_report_button"):
         
         # 버튼 클릭 시, HTML 컴포넌트가 마지막으로 전달한 데이터를 사용
