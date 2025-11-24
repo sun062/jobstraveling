@@ -5,7 +5,6 @@ import json
 # --- 1. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
 MOCK_PROGRAMS = [
     {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
-    # Line 8의 Syntax Error를 수정했습니다. ("description: " -> "description": )
     {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description": "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
     {"id": 3, "title": "경기 AI 로봇 체험관", "region": "경기", "type": "진로", "url": "https://www.google.com/search?q=경기+AI+로봇", "img": "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", "description": "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", "fields": ["AI/IT", "과학/기술", "기계/제조"]},
     {"id": 4, "title": "광주 자동차 미래 산업 탐방", "region": "광주", "type": "견학", "url": "https://www.google.com/search?q=광주+자동차+탐방", "img": "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", "description": "친환경 자동차 생산 라인 및 연구소 방문.", "fields": ["기계/제조", "과학/기술"]},
@@ -17,13 +16,10 @@ MOCK_PROGRAMS = [
 REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
 FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
-# --- 2. HTML 콘텐츠 로드 (TypeError 방지 핵심) ---
-def load_html_content(filepath):
-    """지정된 경로에서 HTML 파일을 안전하게 로드합니다."""
-    try:
-        # 임시로 이전 응답에서 제공한 HTML 코드를 문자열로 직접 사용합니다.
-        # 실제 app.py에서는 이 부분을 파일 읽기 코드로 교체해야 합니다.
-        html_content = """
+# --- 2. HTML 콘텐츠 (기본 템플릿) 로드 ---
+def get_base_html_content():
+    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. {streamlit_data_script}를 포함합니다."""
+    return """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -35,7 +31,9 @@ def load_html_content(filepath):
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: #f0f4f8; 
-            min-height: 100vh;
+            min-height: 100vh; 
+            margin: 0;
+            padding: 0;
         }
         .header-bg {
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
@@ -97,7 +95,7 @@ def load_html_content(filepath):
              <div id="currentFilters" class="text-sm text-white font-light">
                  <!-- 선택된 필터가 여기에 표시됩니다. -->
              </div>
-             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition text-white">
+             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition text-white">
                  초기화
              </button>
         </div>
@@ -160,9 +158,9 @@ def load_html_content(filepath):
         let isFirebaseReady = false; 
         
         // --- 데이터 변수 (백엔드에서 수신) ---
-        let Programs = []; // 실제 프로그램 목록이 백엔드에서 채워짐
-        let Regions = []; // 백엔드에서 지역 목록이 채워짐
-        let Fields = []; // 백엔드에서 분야 목록이 채워짐
+        let Programs = []; 
+        let Regions = []; 
+        let Fields = []; 
 
         // --- 상태 관리 변수 ---
         let currentRegion = ""; 
@@ -173,7 +171,7 @@ def load_html_content(filepath):
             try {
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                 const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initialAuthToken : null;
                 
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -190,7 +188,6 @@ def load_html_content(filepath):
                 isFirebaseReady = true; 
                 console.log("Firebase initialized successfully. User ID:", userId);
                 
-                // Firebase 초기화 완료 후 페이지 로드 로직 실행 및 데이터 요청
                 if (typeof onPageLoad === 'function') {
                     onPageLoad(); 
                 }
@@ -202,12 +199,13 @@ def load_html_content(filepath):
         }
         
         // --- 유틸리티 함수 (메시지 박스) ---
+        let globalNextAction = null;
         function showMessage(text, action = null) {
             const messageBox = document.getElementById('messageBox');
             const messageText = document.getElementById('messageText');
             
             messageText.textContent = text;
-            window.nextAction = action; 
+            globalNextAction = action; 
             if (messageBox) messageBox.classList.remove('hidden');
         }
 
@@ -218,9 +216,9 @@ def load_html_content(filepath):
         
         window.continueAction = function() { // 전역 함수로 등록
             hideMessage();
-            if (typeof window.nextAction === 'function') {
-                window.nextAction(); 
-                window.nextAction = null; 
+            if (typeof globalNextAction === 'function') {
+                globalNextAction(); 
+                globalNextAction = null; 
             }
         }
 
@@ -233,27 +231,24 @@ def load_html_content(filepath):
 
         // Streamlit에 로그아웃 요청
         function requestStreamlitLogout() {
-             showMessage('로그아웃 되었습니다.', () => {
+             showMessage('로그아웃 하시겠습니까?', () => {
                  parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
              });
         }
         
         // 백엔드에서 메시지를 수신하는 리스너
         window.addEventListener('message', (event) => {
-            // Streamlit에서 보낸 메시지인 경우에만 처리
-            if (event.source !== parent) return;
+            if (event.source !== window.parent) return;
 
             const data = event.data;
             if (typeof data !== 'object' || data === null) return;
 
             switch (data.type) {
                 case 'PROGRAM_DATA':
-                    console.log("Received program data from backend.");
                     Programs = data.programs || [];
                     Regions = data.regions || [];
                     Fields = data.fields || [];
                     
-                    // 데이터 수신 후 UI 업데이트
                     createRegionOptions();
                     createFieldOptions();
                     filterPrograms();
@@ -262,7 +257,6 @@ def load_html_content(filepath):
                     showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
                     break;
                 default:
-                    // 다른 유형의 메시지는 무시
                     break;
             }
         });
@@ -271,18 +265,14 @@ def load_html_content(filepath):
         
         // --- 프로그램 렌더링 및 필터링 로직 ---
         
-        // 프로그램 카드를 생성하는 함수
         function createProgramCard(program) {
             const card = document.createElement('a');
-            // 요청대로 카드 클릭 시 해당 URL로 연결
             card.href = program.url; 
             card.target = "_blank"; 
             card.className = "program-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer block border border-gray-100 hover:border-blue-300";
             
-            // 프로그램 타입에 따른 색상 설정
             const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
-            // 분야 태그 문자열 생성
             const fieldTags = (program.fields || []).map(field => 
                 `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
             ).join('');
@@ -306,7 +296,6 @@ def load_html_content(filepath):
             return card;
         }
 
-        // 프로그램 목록을 렌더링하는 함수
         function renderPrograms(programs) {
             const container = document.getElementById('programList');
             if (!container) return;
@@ -323,17 +312,12 @@ def load_html_content(filepath):
             });
         }
         
-        // 검색 필터링 함수 (지역 및 분야 기반)
         window.filterPrograms = function() {
-            // 1. 선택된 지역과 분야를 기준으로 필터링
             const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
             const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
 
             const filtered = Programs.filter(program => {
-                // 지역 필터링
                 const regionMatch = !regionToFilter || program.region === regionToFilter;
-                
-                // 분야 필터링 (다중 선택된 분야 중 하나라도 프로그램의 분야와 일치하면 통과)
                 const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => (program.fields || []).includes(field));
 
                 return regionMatch && fieldMatch;
@@ -343,20 +327,18 @@ def load_html_content(filepath):
             updateFilterDisplay();
         }
 
-        // 현재 선택된 필터 표시를 업데이트하는 함수
         function updateFilterDisplay() {
             const regionText = currentRegion || "전국";
-            const fieldText = currentFields.length > 0 ? currentFields.join(', ') : "전체 분야";
+            const fieldText = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "전체 분야";
             
             document.getElementById('selectedRegionText').textContent = currentRegion || "지역 선택 (필수)";
-            document.getElementById('selectedFieldText').textContent = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "분야 선택 (다중 선택 가능)";
+            document.getElementById('selectedFieldText').textContent = fieldText;
             
             document.getElementById('currentFilters').innerHTML = `
                 현재 필터: <span class="font-bold">${regionText}</span> & <span class="font-bold">${fieldText}</span>
             `;
         }
 
-        // 필터 초기화 함수
         window.resetFilters = function() {
             currentRegion = "";
             currentFields = [];
@@ -364,20 +346,16 @@ def load_html_content(filepath):
             showMessage('검색 조건이 초기화되었습니다.');
         }
 
-        // 페이지 로드 시 UI 및 데이터 로직 실행
         window.onPageLoad = function() {
-            // Firebase 인증 후 백엔드에 데이터 요청
             requestInitialData();
-            // 기본 필터 표시
             updateFilterDisplay();
         }
         
         // --- 모달 관련 로직 ---
 
-        // 지역 모달 생성
         function createRegionOptions() {
             const container = document.getElementById('regionOptions');
-            container.innerHTML = ''; // 기존 옵션 초기화
+            container.innerHTML = ''; 
             Regions.forEach(region => {
                 const button = document.createElement('button');
                 button.textContent = region;
@@ -387,15 +365,13 @@ def load_html_content(filepath):
             });
         }
 
-        // 지역 선택 처리
         function selectRegion(region) {
             currentRegion = region;
             hideRegionModal();
-            filterPrograms(); // 필터링 실행
+            filterPrograms(); 
             updateFilterDisplay();
         }
 
-        // 지역 모달 표시/숨기기
         window.showRegionModal = function() {
             if (!isFirebaseReady || Regions.length === 0) {
                  showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
@@ -408,16 +384,14 @@ def load_html_content(filepath):
             document.getElementById('regionModal').classList.add('hidden');
         }
 
-        // 분야 모달 생성
         function createFieldOptions() {
             const container = document.getElementById('fieldOptions');
-            container.innerHTML = ''; // 기존 옵션 초기화
+            container.innerHTML = ''; 
             Fields.forEach(field => {
                 const button = document.createElement('button');
                 button.textContent = field;
                 button.setAttribute('data-field', field);
                 
-                // 초기 상태 설정
                 const isActive = currentFields.includes(field);
                 button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
                 
@@ -426,90 +400,70 @@ def load_html_content(filepath):
             });
         }
         
-        // 분야 선택/해제 토글
         function toggleField(field, button) {
             const index = currentFields.indexOf(field);
             if (index > -1) {
-                // 선택 해제
                 currentFields.splice(index, 1);
                 button.classList.remove('tag-active');
                 button.classList.add('tag-inactive');
             } else {
-                // 선택
                 currentFields.push(field);
                 button.classList.remove('tag-inactive');
                 button.classList.add('tag-active');
             }
         }
         
-        // 분야 모달 표시/숨기기
         window.showFieldModal = function() {
             if (!isFirebaseReady || Fields.length === 0) {
                  showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
                  return;
             }
-            // 모달 열 때 현재 선택된 상태를 반영하여 태그 클래스 업데이트
+            // 모달을 열 때 현재 상태를 반영합니다.
             document.querySelectorAll('#fieldOptions button').forEach(button => {
                 const field = button.getAttribute('data-field');
                 const isActive = currentFields.includes(field);
-                if (isActive) {
-                    button.classList.add('tag-active');
-                    button.classList.remove('tag-inactive');
-                } else {
-                    button.classList.remove('tag-active');
-                    button.classList.add('tag-inactive');
-                }
+                button.classList.toggle('tag-active', isActive);
+                button.classList.toggle('tag-inactive', !isActive);
             });
             document.getElementById('fieldModal').classList.remove('hidden');
         }
 
         window.applyFieldSelection = function() {
-            // "선택 완료" 버튼 클릭 시 모달 닫고 필터링 실행
             document.getElementById('fieldModal').classList.add('hidden');
             filterPrograms();
             updateFilterDisplay();
         }
         
-        // 최초 로드 시 기본 필터 표시
         updateFilterDisplay();
 
     </script>
+    {streamlit_data_script}
 </body>
 </html>
 """
-        return html_content
-    except Exception as e:
-        st.error(f"HTML 파일을 로드하는 중 오류 발생: {e}")
-        return None
 
 # --- 3. Streamlit 페이지 렌더링 함수 ---
 def render_home_page():
-    # 1. HTML 콘텐츠 로드 (TypeError 방지)
-    # 이 부분에서 'home.html' 파일 내용을 직접 읽어오도록 수정하세요.
-    html_content = load_html_content("home.html") 
     
-    if html_content is None:
-        # html_content가 None이면 더 이상 진행하지 않고 오류 메시지를 표시합니다.
-        st.error("홈 화면을 로드할 수 없습니다. HTML 콘텐츠가 비어 있습니다.")
-        return
-
-    # 2. HTML 컴포넌트 렌더링 (에러가 발생했던 line 379 근처)
-    # Streamlit은 사용자 정의 컴포넌트가 JavaScript에서 postMessage를 통해 데이터를 보낼 때,
-    # 해당 데이터를 반환합니다.
+    # 1. 초기 HTML 콘텐츠를 세션 상태에 저장 및 초기화
+    if 'base_html' not in st.session_state:
+        st.session_state['base_html'] = get_base_html_content()
+        # 최초에는 빈 스크립트를 삽입한 기본 HTML을 사용
+        st.session_state['current_html'] = st.session_state['base_html'].format(streamlit_data_script="")
+    
+    # 2. HTML 컴포넌트 렌더링
     component_value = components.html(
-        html_content,
-        height=1200, # 충분한 높이 설정
+        st.session_state['current_html'],
+        height=1200, 
         scrolling=True,
-        key="home_filter_component" # 고유한 키 사용
+        key="home_filter_component"
     )
 
     # 3. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신)
     if component_value:
-        st.session_state['last_html_message'] = component_value
         message = component_value
 
         if isinstance(message, dict) and message.get('type') == 'GET_INITIAL_DATA':
-            st.session_state['html_ready'] = True
             
             # HTML로 보낼 데이터 구조
             data_to_send = {
@@ -519,36 +473,35 @@ def render_home_page():
                 "fields": FIELDS
             }
             
-            # HTML Content에 동적 스크립트 추가
-            script = f"""
+            # 4. 데이터 전송을 위한 동적 스크립트 생성
+            data_json = json.dumps(data_to_send)
+            
+            streamlit_data_script = f"""
             <script>
-                // 데이터 주입 스크립트
-                const dataPayload = {json.dumps(data_to_send)};
-                
-                // 데이터 요청이 들어왔을 때만 응답으로 데이터를 postMessage 합니다.
-                // 이 스크립트를 포함한 HTML이 다시 렌더링될 때, 즉시 데이터를 전송합니다.
-                parent.postMessage(dataPayload, '*');
-                
+                // 데이터 주입 스크립트: Streamlit Python 백엔드에서 받은 데이터를 JS로 주입
+                const dataPayload = {data_json};
+                // 스크립트 로드 즉시 데이터를 전송하여 JavaScript가 처리하도록 합니다.
+                window.parent.postMessage(dataPayload, '*'); 
             </script>
             """
             
-            # 새로운 HTML 콘텐츠로 업데이트 (Streamlit은 이를 감지하고 다시 렌더링하여 스크립트 실행)
-            st.session_state['home_html_content'] = html_content + script
+            # 5. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
+            new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
+            
+            # 6. 세션 상태 업데이트 및 재실행 요청
+            st.session_state['current_html'] = new_html
             st.rerun()
-
-        # TODO: 다른 메시지 처리 로직 (예: 필터 변경, 로그아웃 요청) 추가
 
 # --- 4. 메인 실행 블록 ---
 if __name__ == '__main__':
     st.set_page_config(layout="wide")
 
-    # 가짜 인증 세션 상태 설정 (실제 인증 로직 대체)
+    # 가짜 인증 세션 상태 설정
     if 'user_authenticated' not in st.session_state:
-        st.session_state['user_authenticated'] = True # 인증되었다고 가정
+        st.session_state['user_authenticated'] = True 
 
     if st.session_state.get('user_authenticated'):
         st.title("잡스트레블링 - 홈 (Streamlit)")
-        # TypeError가 발생했던 함수를 호출
         render_home_page()
     else:
         st.error("로그인 페이지로 이동해야 합니다.")
