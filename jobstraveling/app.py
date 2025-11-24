@@ -311,7 +311,6 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
-    (파일 로드 안정성 및 로깅 개선)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -325,11 +324,12 @@ def render_add_report_page():
 
     if html_content_safe.strip():
         try:
+            # **수정**: 'key' 인수를 제거하여 Streamlit 내부 오류를 회피
             component_value = components.html(
                 html=html_content_safe,  # 안전하게 변환된 문자열 전달
                 height=700, 
                 scrolling=True,
-                key="report_form_component"
+                # key="report_form_component"  <-- 이 인수를 제거했습니다.
             )
         except Exception as e:
             # Streamlit 내부 오류 발생 시에도 앱이 다운되지 않도록 처리
