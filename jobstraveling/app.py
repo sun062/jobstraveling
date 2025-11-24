@@ -38,7 +38,6 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def get_login_html_base64():
     """
     로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
-    TypeError를 유발하는 Python 포맷팅을 완전히 우회하기 위한 최종 전략입니다.
     """
     # 템플릿 콘텐츠 (Raw String + 이중 이스케이프 유지)
     html_content = r"""
@@ -50,7 +49,7 @@ def get_login_html_base64():
     <title>로그인</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {{ 
+        body { 
             font-family: 'Inter', sans-serif; 
             background-color: #f0f4f8; 
             display: flex;
@@ -59,8 +58,8 @@ def get_login_html_base64():
             min-height: 100vh;
             margin: 0;
             padding: 20px;
-        }}
-        .login-card {{
+        }
+        .login-card {
             background-color: white;
             padding: 2.5rem;
             border-radius: 1rem;
@@ -68,7 +67,7 @@ def get_login_html_base64():
             max-width: 400px;
             width: 100%;
             text-align: center;
-        }}
+        }
     </style>
 </head>
 <body>
@@ -89,10 +88,10 @@ def get_login_html_base64():
     </div>
 
     <script>
-        function simulateLogin() {{
+        function simulateLogin() {
             // Streamlit Python 백엔드에 'home'으로 이동하라는 메시지를 보내 인증 상태를 변경하도록 요청
-            parent.postMessage({{ type: 'NAVIGATE', page: 'home' }}, '*');
-        }}
+            parent.postMessage({ type: 'NAVIGATE', page: 'home' }, '*');
+        }
     </script>
 </body>
 </html>
@@ -106,12 +105,12 @@ def get_base64_decoder_html():
     Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
     최소한의 HTML 스크립트를 반환합니다.
     
-    이 함수는 Python f-string을 사용하여 인코딩된 콘텐츠를 JavaScript 변수에 직접 삽입합니다.
+    주의: Streamlit의 포맷팅 충돌을 피하기 위해, f-string 대신 수동 치환을 사용합니다.
     """
     encoded_content = get_login_html_base64()
     
-    # Python 포맷팅 충돌 가능성을 최소화하기 위해, JavaScript 코드 내부의 중괄호는 {{ }}로 이스케이프 처리합니다.
-    decoder_html = f"""
+    # 표준 문자열 템플릿을 정의합니다. (f-string이 아님)
+    decoder_html_template = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -122,38 +121,41 @@ def get_base64_decoder_html():
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
         // 1. Base64로 인코딩된 HTML 콘텐츠를 Python 변수에서 직접 가져와 JavaScript 변수에 할당
-        const encoded = '{encoded_content}';
+        const encoded = '{ENCODED_CONTENT_PLACEHOLDER}';
         
         // 2. Base64 디코딩 함수 (JavaScript 중괄호를 이스케이프 처리)
-        function decodeBase64(base64) {{
+        function decodeBase64(base64) {
             // 브라우저 API를 사용하여 디코딩
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {{
+            for (let i = 0; i < len; i++) {
                 bytes[i] = binary_string.charCodeAt(i);
-            }}
+            }
             return new TextDecoder().decode(bytes);
-        }}
+        }
 
         // 3. 디코딩 및 삽입
-        try {{
+        try {
             const decodedHtml = decodeBase64(encoded);
             // document.body 대신 document 전체의 내용을 덮어씁니다.
             document.open();
             document.write(decodedHtml);
             document.close();
-        }} catch(e) {{
+        } catch(e) {
             // 오류 발생 시 사용자에게 메시지 표시
             document.getElementById('loading-message').style.color = 'red';
             document.getElementById('loading-message').textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
             console.error("Base64 decoding failed:", e);
-        }}
+        }
     </script>
 </body>
 </html>
     """
-    return decoder_html
+    
+    # 4. 수동으로 Placeholder를 Base64 인코딩된 문자열로 치환합니다.
+    # 인코딩된 콘텐츠는 JavaScript 문자열로 감싸져야 합니다.
+    return decoder_html_template.replace('{ENCODED_CONTENT_PLACEHOLDER}', encoded_content)
 
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
@@ -593,14 +595,14 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다.
+    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. (이제 f-string이 아님)
     login_html_content = get_base64_decoder_html()
 
     # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
     component_value = components.html(
         login_html_content,
-        height=600, # 높이를 약간 줄여 컴포넌트 오류 발생 가능성 최소화
-        scrolling=True, # 스크롤링 허용 (안전성 증대)
+        height=600, 
+        scrolling=True, 
         key="login_component"
     )
 
