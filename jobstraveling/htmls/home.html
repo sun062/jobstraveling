@@ -3,164 +3,422 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>잡스트레블링 홈</title>
-    <!-- Tailwind CSS CDN -->
+    <title>잡스트레블링 - 홈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8; /* Light blue background */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f4f8; 
+            min-height: 100vh;
         }
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
+        .header-bg {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
         }
-        .card {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-            padding: 24px;
+        .program-card {
             transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
         }
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        .program-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
-        .btn-action {
-            width: 100%;
-            padding: 10px;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background-color 0.2s;
+        .tag-active {
+            background-color: #2563eb; /* Blue 700 */
+            color: white;
+            border-color: #2563eb;
+        }
+        .tag-inactive {
+            background-color: #e0f2f7; /* Light Cyan */
+            color: #0c4a6e; /* Cyan 900 */
+            border-color: #bae6fd; /* Cyan 200 */
         }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="p-0">
 
-    <div class="main-container">
-        <!-- 상단 환영 섹션 -->
-        <header class="bg-white p-6 rounded-xl shadow-lg mb-8 border-l-8 border-indigo-500">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <div>
-                    <h1 class="text-3xl font-extrabold text-gray-900 mb-1">안녕하세요, {{USER_NAME}}님! 👋</h1>
-                    <p class="text-lg text-gray-600">오늘도 꿈을 향한 트레킹을 시작해 보세요.</p>
-                </div>
-                <div class="mt-4 sm:mt-0 text-right">
-                    <p class="text-sm font-medium text-gray-500">{{USER_SCHOOL}}</p>
-                    <p class="text-xl font-bold text-indigo-600">{{USER_CLASS}}</p>
-                </div>
-            </div>
-        </header>
-
-        <!-- 핵심 기능 카드 섹션 -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+    <!-- 1. 상단 헤더 및 검색 바 -->
+    <header class="header-bg p-4 shadow-lg sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto flex justify-between items-center text-white">
+            <h1 class="text-2xl font-bold">🗺️ Job-Trekking 홈</h1>
+            <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition">
+                로그아웃
+            </button>
+        </div>
+        
+        <!-- 선택형 검색 입력 영역 -->
+        <div class="max-w-4xl mx-auto mt-4 grid grid-cols-2 gap-3">
             
-            <!-- 1. 잡스리포트 기록 (신규) -->
-            <div id="add-report-card" class="card bg-blue-50 border-t-4 border-blue-500">
-                <div class="text-blue-500 mb-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg></div>
-                <h2 class="text-xl font-bold text-gray-800 mb-2">잡스리포트 기록하기</h2>
-                <p class="text-gray-600 text-sm mb-4">체험한 진로/견학 프로그램을 기록하고 평가하세요.</p>
-                <button id="add-report-btn" class="btn-action bg-blue-500 text-white hover:bg-blue-600">리포트 작성</button>
-            </div>
-            
-            <!-- 2. 로드맵 관리 (위치 변경) -->
-            <div class="card bg-green-50 border-t-4 border-green-500">
-                <div class="text-green-500 mb-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c1.657 0 3 .895 3 2s-1.343 2-3 2v2m0 0v2m0-8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-                <h2 class="text-xl font-bold text-gray-800 mb-2">진로 로드맵</h2>
-                <p class="text-gray-600 text-sm mb-4">목표 직업을 향한 구체적인 학습 계획을 관리하세요.</p>
-                <button class="btn-action bg-green-500 text-white hover:bg-green-600">로드맵 확인</button>
+            <!-- 지역 선택 박스 -->
+            <div id="regionSelectBox" onclick="showRegionModal()" 
+                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
+                <span id="selectedRegionText" class="truncate font-medium text-gray-600">지역 선택 (필수)</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
             </div>
 
-            <!-- 3. 실무 경험 (프로그램 목록) -->
-            <div id="program-list-card" class="card bg-yellow-50 border-t-4 border-yellow-500">
-                <div class="text-yellow-500 mb-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16L2 12l4-4"/></svg></div>
-                <h2 class="text-xl font-bold text-gray-800 mb-2">실무 경험 프로젝트</h2>
-                <p class="text-gray-600 text-sm mb-4">직무 관련 미니 프로젝트를 통해 포트폴리오를 쌓으세요.</p>
-                <button id="view-programs-btn" class="btn-action bg-yellow-500 text-white hover:bg-yellow-600">프로젝트 둘러보기</button>
-            </div>
-
-            <!-- 4. Q&A 커뮤니티 -->
-            <div class="card bg-purple-50 border-t-4 border-purple-500">
-                <div class="text-purple-500 mb-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.692A9.705 9.705 0 013 12C3 7.582 7.03 4 12 4s9 3.582 9 8z"/></svg></div>
-                <h2 class="text-xl font-bold text-gray-800 mb-2">멘토링 & Q&A</h2>
-                <p class="text-gray-600 text-sm mb-4">선배 멘토와 질문하고 진로 고민을 나누는 공간입니다.</p>
-                <button class="btn-action bg-purple-500 text-white hover:bg-purple-600">커뮤니티 가기</button>
+            <!-- 분야 선택 박스 -->
+            <div id="fieldSelectBox" onclick="showFieldModal()" 
+                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
+                <span id="selectedFieldText" class="truncate font-medium text-gray-600">분야 선택 (다중 선택 가능)</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
             </div>
         </div>
 
-        <!-- 추가 정보 섹션 (하단 유지) -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <!-- 최근 활동 내역 -->
-            <div class="lg:col-span-2 card">
-                <h3 class="text-2xl font-bold text-gray-800 mb-4">최근 활동 내역</h3>
-                <ul class="space-y-3">
-                    <li class="flex justify-between items-center p-3 border-b border-gray-100 last:border-b-0">
-                        <span class="text-gray-700 font-medium">직업 적성 검사</span>
-                        <span class="text-sm text-green-600 bg-green-100 px-3 py-1 rounded-full">완료</span>
-                    </li>
-                    <li class="flex justify-between items-center p-3 border-b border-gray-100 last:border-b-0">
-                        <span class="text-gray-700 font-medium">데이터 사이언티스트 로드맵</span>
-                        <span class="text-sm text-yellow-600 bg-yellow-100 px-3 py-1 rounded-full">진행 중 (50%)</span>
-                    </li>
-                    <li class="flex justify-between items-center p-3 border-b border-gray-100 last:border-b-0">
-                        <span class="text-gray-700 font-medium">미래 산업 트렌드 읽기</span>
-                        <span class="text-sm text-blue-600 bg-blue-100 px-3 py-1 rounded-full">새 자료</span>
-                    </li>
-                </ul>
-            </div>
-            
-            <!-- 내 포인트 & 레벨 -->
-            <div class="card bg-indigo-100 border-t-4 border-indigo-500">
-                <h3 class="text-2xl font-bold text-indigo-800 mb-4">나의 트레킹 현황</h3>
-                
-                <div class="mb-5">
-                    <p class="text-sm text-indigo-600 font-semibold">현재 레벨</p>
-                    <div class="flex items-center space-x-2">
-                        <span class="text-3xl font-extrabold text-indigo-900">Level 3</span>
-                        <span class="text-gray-500">(탐험가)</span>
-                    </div>
-                </div>
-                
-                <div>
-                    <p class="text-sm text-indigo-600 font-semibold">누적 포인트</p>
-                    <p class="text-3xl font-extrabold text-indigo-900">1,200 P</p>
-                    <p class="text-xs text-gray-500 mt-1">포인트로 다양한 학습 리소스를 이용해보세요.</p>
-                </div>
-            </div>
-
+        <!-- 현재 검색 조건 표시 및 초기화 버튼 -->
+        <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
+             <div id="currentFilters" class="text-sm text-white font-light">
+                <!-- 선택된 필터가 여기에 표시됩니다. -->
+             </div>
+             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity-30 transition text-white">
+                초기화
+            </button>
         </div>
+    </header>
 
+    <!-- 2. 프로그램 목록 -->
+    <main class="max-w-4xl mx-auto p-4 sm:p-8">
+        <h2 class="text-xl font-bold text-gray-800 mb-4">⭐ 프로그램 검색 결과</h2>
+        
+        <div id="programList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- 프로그램 카드가 JS에 의해 여기에 삽입됩니다. -->
+        </div>
+    </main>
+
+    <!-- 3. Footer (선택 사항) -->
+    <footer class="text-center text-gray-500 text-sm py-6 border-t mt-10">
+        © 2024 Job-Trekking | 모든 프로그램 정보는 주관사에 귀속됩니다.
+    </footer>
+    
+    <!-- 메시지 박스 (Firebase Error / Logout Confirm) -->
+    <div id="messageBox" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full text-center">
+            <p id="messageText" class="text-gray-800 font-medium mb-4"></p>
+            <button onclick="continueAction()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">확인</button>
+        </div>
     </div>
 
-    <script>
-        // Streamlit 컴포넌트 간 통신을 위한 로직
-        function navigateTo(page) {
-             window.parent.postMessage({ type: 'streamlit:setComponentValue', value: page }, '*');
+    <!-- 지역 선택 모달 -->
+    <div id="regionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2">지역 선택 (시/도)</h3>
+            <div id="regionOptions" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto">
+                <!-- 지역 버튼들이 여기에 생성됩니다. -->
+            </div>
+            <button onclick="hideRegionModal()" class="mt-6 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">닫기</button>
+        </div>
+    </div>
+
+    <!-- 분야 선택 모달 (다중 선택) -->
+    <div id="fieldModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
+            <h3 class="text-lg font-bold mb-4 border-b pb-2">분야 선택 (다중 선택)</h3>
+            <div id="fieldOptions" class="flex flex-wrap gap-2 max-h-80 overflow-y-auto">
+                <!-- 분야 태그들이 여기에 생성됩니다. -->
+            </div>
+            <button onclick="applyFieldSelection()" class="mt-6 w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">선택 완료</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase 초기화 및 인증 로직
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        let db;
+        let auth;
+        let userId; 
+        let appId;
+        let isFirebaseReady = false; 
+        
+        // --- 상태 관리 변수 ---
+        let currentRegion = ""; 
+        let currentFields = []; 
+        
+        // Mock 데이터: 견학 및 진로 프로그램 목록 (필터링을 위해 'fields' 추가)
+        const MockPrograms = [
+            { id: 1, title: "서울시 IT 미래 인재 캠프", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울시+IT+캠프", img: "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", description: "IT 기술 체험 및 현직자 멘토링 프로그램.", fields: ["AI/IT", "과학/기술"] },
+            { id: 2, title: "부산항만 공사 견학", region: "부산", type: "견학", url: "https://www.google.com/search?q=부산항만+견학", img: "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", description: "대한민국 최대 항만의 물류 흐름 체험.", fields: ["운송/물류", "사회/인문"] },
+            { id: 3, title: "경기 AI 로봇 체험관", region: "경기", type: "진로", url: "https://www.google.com/search?q=경기+AI+로봇", img: "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", description: "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", fields: ["AI/IT", "과학/기술", "기계/제조"] },
+            { id: 4, title: "광주 자동차 미래 산업 탐방", region: "광주", type: "견학", url: "https://www.google.com/search?q=광주+자동차+탐방", img: "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", description: "친환경 자동차 생산 라인 및 연구소 방문.", fields: ["기계/제조", "과학/기술"] },
+            { id: 5, title: "강원 환경보호 교육 캠페인", region: "강원", type: "진로", url: "https://www.google.com/search?q=강원+환경+캠페인", img: "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", description: "지속 가능한 환경과 관련된 직업군 탐색.", fields: ["생명/환경", "사회/인문"] },
+            { id: 6, title: "서울 고궁 문화 해설사 체험", region: "서울", type: "진로", url: "https://www.google.com/search?q=서울+문화+해설사", img: "https://placehold.co/400x200/5a32a8/ffffff?text=Culture+Guide", description: "역사 해설 및 문화재 보존 체험.", fields: ["예술/문화", "사회/인문"] },
+            { id: 7, title: "대전 나노 반도체 특강", region: "대전", type: "진로", url: "https://www.google.com/search?q=대전+반도체+특강", img: "https://placehold.co/400x200/3498db/ffffff?text=Semiconductor", description: "미래 기술의 핵심, 반도체 제조 과정 이해.", fields: ["과학/기술", "AI/IT", "화학"] },
+        ];
+        
+        // 지역 및 분야 데이터
+        const Regions = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"];
+        const Fields = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"];
+
+        // --- Firebase 초기화 함수 ---
+        async function initializeFirebase() {
+            try {
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('Debug');
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                isFirebaseReady = true; 
+                console.log("Firebase initialized successfully. User ID:", userId);
+                
+                // Firebase 초기화 완료 후 페이지 로드 로직 실행
+                if (typeof onPageLoad === 'function') {
+                    onPageLoad(); 
+                }
+
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+            }
+        }
+        
+        // --- 유틸리티 함수 (메시지 박스) ---
+        function showMessage(text, action = null) {
+            const messageBox = document.getElementById('messageBox');
+            const messageText = document.getElementById('messageText');
+            
+            messageText.textContent = text;
+            window.nextAction = action; 
+            if (messageBox) messageBox.classList.remove('hidden');
         }
 
-        // 1. 프로그램 목록 버튼 클릭 리스너 (기존)
-        document.getElementById('view-programs-btn').addEventListener('click', () => {
-            navigateTo('program_list');
-        });
-        document.getElementById('program-list-card').addEventListener('click', (event) => {
-            if (event.target.id !== 'view-programs-btn') {
-                navigateTo('program_list');
+        function hideMessage() {
+            const messageBox = document.getElementById('messageBox');
+            if (messageBox) messageBox.classList.add('hidden');
+        }
+        
+        window.continueAction = function() { // 전역 함수로 등록
+            hideMessage();
+            if (typeof window.nextAction === 'function') {
+                window.nextAction(); 
+                window.nextAction = null; 
             }
-        });
+        }
 
-        // 2. 잡스리포트 기록 버튼 클릭 리스너 (신규)
-        document.getElementById('add-report-btn').addEventListener('click', () => {
-            navigateTo('add_report'); // PAGE_ADD_REPORT와 일치하는 값
-        });
-        document.getElementById('add-report-card').addEventListener('click', (event) => {
-            if (event.target.id !== 'add-report-btn') {
-                navigateTo('add_report');
+        // Streamlit 관련 함수
+        function requestStreamlitLogout() {
+             showMessage('로그아웃 되었습니다.', () => {
+                 parent.postMessage({type: 'NAVIGATE', page: 'login'}, '*');
+             });
+        }
+        
+        window.onload = initializeFirebase;
+        
+        // --- 프로그램 렌더링 및 필터링 로직 ---
+        
+        // 프로그램 카드를 생성하는 함수
+        function createProgramCard(program) {
+            const card = document.createElement('a');
+            // 요청대로 카드 클릭 시 해당 URL로 연결
+            card.href = program.url; 
+            card.target = "_blank"; 
+            card.className = "program-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer block border border-gray-100 hover:border-blue-300";
+            
+            // 프로그램 타입에 따른 색상 설정
+            const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
+
+            // 분야 태그 문자열 생성
+            const fieldTags = program.fields.map(field => 
+                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
+            ).join('');
+
+            card.innerHTML = `
+                <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Placeholder';" alt="${program.title}" class="w-full h-40 object-cover">
+                <div class="p-4 space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
+                        ${fieldTags}
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
+                    <p class="text-sm text-gray-500">${program.description}</p>
+                    <p class="text-xs text-gray-400 font-medium flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        ${program.region}
+                    </p>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // 프로그램 목록을 렌더링하는 함수
+        function renderPrograms(programs) {
+            const container = document.getElementById('programList');
+            if (!container) return;
+
+            container.innerHTML = '';
+            
+            if (programs.length === 0) {
+                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다. 검색 조건을 변경해 보세요.</p>';
+                return;
             }
-        });
+
+            programs.forEach(program => {
+                container.appendChild(createProgramCard(program));
+            });
+        }
+        
+        // 검색 필터링 함수 (지역 및 분야 기반)
+        window.filterPrograms = function() {
+            // 1. 선택된 지역과 분야를 기준으로 필터링
+            const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
+            const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
+
+            const filtered = MockPrograms.filter(program => {
+                // 지역 필터링
+                const regionMatch = !regionToFilter || program.region === regionToFilter;
+                
+                // 분야 필터링 (다중 선택된 분야 중 하나라도 프로그램의 분야와 일치하면 통과)
+                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => program.fields.includes(field));
+
+                return regionMatch && fieldMatch;
+            });
+
+            renderPrograms(filtered);
+            updateFilterDisplay();
+        }
+
+        // 현재 선택된 필터 표시를 업데이트하는 함수
+        function updateFilterDisplay() {
+            const regionText = currentRegion || "전국";
+            const fieldText = currentFields.length > 0 ? currentFields.join(', ') : "전체 분야";
+            
+            document.getElementById('selectedRegionText').textContent = currentRegion || "지역 선택 (필수)";
+            document.getElementById('selectedFieldText').textContent = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "분야 선택 (다중 선택 가능)";
+            
+            document.getElementById('currentFilters').innerHTML = `
+                현재 필터: <span class="font-bold">${regionText}</span> & <span class="font-bold">${fieldText}</span>
+            `;
+        }
+
+        // 필터 초기화 함수
+        window.resetFilters = function() {
+            currentRegion = "";
+            currentFields = [];
+            filterPrograms();
+            showMessage('검색 조건이 초기화되었습니다.');
+        }
+
+        // 페이지 로드 시 전체 프로그램 렌더링 및 UI 초기화
+        window.onPageLoad = function() {
+            // 기본적으로 전체 목록 렌더링
+            filterPrograms(); 
+            // 모달에 지역 및 분야 옵션 생성
+            createRegionOptions();
+            createFieldOptions();
+        }
+        
+        // --- 모달 관련 로직 ---
+
+        // 지역 모달 생성
+        function createRegionOptions() {
+            const container = document.getElementById('regionOptions');
+            Regions.forEach(region => {
+                const button = document.createElement('button');
+                button.textContent = region;
+                button.className = "p-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-500 hover:text-white transition text-sm font-medium";
+                button.onclick = () => selectRegion(region);
+                container.appendChild(button);
+            });
+        }
+
+        // 지역 선택 처리
+        function selectRegion(region) {
+            currentRegion = region;
+            hideRegionModal();
+            filterPrograms(); // 필터링 실행
+            updateFilterDisplay();
+        }
+
+        // 지역 모달 표시/숨기기
+        window.showRegionModal = function() {
+            if (!isFirebaseReady) {
+                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+                 return;
+            }
+            document.getElementById('regionModal').classList.remove('hidden');
+        }
+
+        window.hideRegionModal = function() {
+            document.getElementById('regionModal').classList.add('hidden');
+        }
+
+        // 분야 모달 생성
+        function createFieldOptions() {
+            const container = document.getElementById('fieldOptions');
+            Fields.forEach(field => {
+                const button = document.createElement('button');
+                button.textContent = field;
+                button.setAttribute('data-field', field);
+                
+                // 초기 상태 설정
+                const isActive = currentFields.includes(field);
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
+                
+                button.onclick = () => toggleField(field, button);
+                container.appendChild(button);
+            });
+        }
+        
+        // 분야 선택/해제 토글
+        function toggleField(field, button) {
+            const index = currentFields.indexOf(field);
+            if (index > -1) {
+                // 선택 해제
+                currentFields.splice(index, 1);
+                button.classList.remove('tag-active');
+                button.classList.add('tag-inactive');
+            } else {
+                // 선택
+                currentFields.push(field);
+                button.classList.remove('tag-inactive');
+                button.classList.add('tag-active');
+            }
+        }
+        
+        // 분야 모달 표시/숨기기
+        window.showFieldModal = function() {
+            if (!isFirebaseReady) {
+                 showMessage('Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
+                 return;
+            }
+            // 모달 열 때 현재 선택된 상태를 반영하여 태그 클래스 업데이트
+            document.querySelectorAll('#fieldOptions button').forEach(button => {
+                const field = button.getAttribute('data-field');
+                const isActive = currentFields.includes(field);
+                if (isActive) {
+                    button.classList.add('tag-active');
+                    button.classList.remove('tag-inactive');
+                } else {
+                    button.classList.remove('tag-active');
+                    button.classList.add('tag-inactive');
+                }
+            });
+            document.getElementById('fieldModal').classList.remove('hidden');
+        }
+
+        window.applyFieldSelection = function() {
+            // "선택 완료" 버튼 클릭 시 모달 닫고 필터링 실행
+            document.getElementById('fieldModal').classList.add('hidden');
+            filterPrograms();
+            updateFilterDisplay();
+        }
+        
+        // 최초 로드 시 기본 필터 표시
+        updateFilterDisplay();
+
     </script>
 </body>
 </html>
