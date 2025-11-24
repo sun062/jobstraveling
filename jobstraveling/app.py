@@ -4,6 +4,19 @@ import os
 import json 
 from datetime import date, datetime 
 
+# --- Firebase Imports ---
+# NOTE: Firebase 관련 import는 HTML/React/Angular 파일 내의 <script type="module"> 안에서 이루어집니다.
+# Python 파일에서는 Firebase SDK가 직접 실행되지 않으므로, 이 파일을 실행할 환경에 맞게 Mock 처리하거나
+# Streamlit 컴포넌트 내부에서만 JS SDK를 사용해야 합니다. 
+# 현재 구조는 Python(Streamlit)은 페이지 흐름만 제어하고, 데이터베이스 상호작용은 
+# Streamlit Component (htmls/program_list.html 등) 내의 JavaScript가 담당하는 방식으로 설계합니다.
+
+# --- Global Environment Variables ---
+# Canvas 환경 변수 로드 (Firestore 사용을 위한 필수 변수)
+firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
+appId = os.environ.get('__app_id', 'default-app-id')
+initialAuthToken = os.environ.get('__initial_auth_token', '')
+
 # --- 1. 환경 설정 및 세션 상태 초기화 ---
 st.set_page_config(layout="centered", initial_sidebar_state="expanded")
 
@@ -11,6 +24,8 @@ st.set_page_config(layout="centered", initial_sidebar_state="expanded")
 PAGE_LOGIN = 'login'
 PAGE_SIGNUP = 'signup'
 PAGE_HOME = 'home'
+PAGE_PROGRAM_LIST = 'program_list' # 새로 추가
+PAGE_ADD_PROGRAM = 'add_program'   # 새로 추가 (관리자용)
 
 # 세션 상태 초기화
 if 'current_page' not in st.session_state:
@@ -22,13 +37,25 @@ if 'is_auth_ready' not in st.session_state:
 if 'mock_user' not in st.session_state:
     # 기본 Mock 사용자 정보 설정 (회원가입 전 기본 로그인 테스트용)
     st.session_state.mock_user = {
-        'email': 'test@example.com',
-        'password': 'password123',
-        'schoolName': '가상고등학교',
-        'classNumber': '301',
-        'studentName': '홍길동',
-        'birthDate': '2007-01-01'
-    } 
+        'email': 'admin@jobtrekking.com', # 관리자 계정 변경
+        'password': 'adminpassword',
+        'schoolName': '관리자 학교',
+        'classNumber': '999',
+        'studentName': '관리자',
+        'birthDate': '2000-01-01',
+        'isAdmin': True # 관리자 플래그 추가
+    }
+# 일반 사용자 Mock 계정 (옵션)
+if 'mock_user_normal' not in st.session_state:
+    st.session_state.mock_user_normal = {
+        'email': 'user@jobtrekking.com', 
+        'password': 'userpassword',
+        'schoolName': '일반 고등학교',
+        'classNumber': '101',
+        'studentName': '일반사용자',
+        'birthDate': '2007-01-01',
+        'isAdmin': False
+    }
 
 # --- 2. HTML 파일 로드 함수 ---
 def read_html_file(file_name):
@@ -50,7 +77,7 @@ def navigate(page):
 # --- 4. 페이지 렌더링 함수 ---
 
 def render_login_page():
-    """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다. (안정적인 로그인 방식)"""
+    """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("로그인")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -58,7 +85,7 @@ def render_login_page():
         with st.form("login_form", clear_on_submit=False):
             st.markdown('<h3 style="text-align: center; color: #3b82f6;">Job-Trekking 로그인</h3>', unsafe_allow_html=True)
             
-            st.info("💡 **팁:** 회원가입 시 입력하신 이메일과 비밀번호로 로그인해 주세요.")
+            st.info("💡 **팁:** 관리자 계정: `admin@jobtrekking.com`/`adminpassword` | 일반 계정: `user@jobtrekking.com`/`userpassword`")
             
             email = st.text_input("이메일 주소", key="login_email")
             password = st.text_input("비밀번호", type="password", key="login_password")
@@ -66,26 +93,30 @@ def render_login_page():
             login_submitted = st.form_submit_button("로그인")
             
             if login_submitted:
-                # 1. 유효성 검사
                 if not all([email, password]):
                     st.error("이메일과 비밀번호를 모두 입력해 주세요.")
                     return
                 
-                # 2. Mock 로그인 처리 (회원가입 시 저장된 mock_user 정보와 대조)
-                mock_user = st.session_state.mock_user
-                
-                if (mock_user and 
-                    mock_user.get('email') == email and 
-                    mock_user.get('password') == password):
+                # Mock 로그인 처리 (관리자 또는 일반 사용자 계정 대조)
+                user_to_check = None
+                if email == st.session_state.mock_user['email']:
+                    user_to_check = st.session_state.mock_user
+                elif email == st.session_state.mock_user_normal['email']:
+                    user_to_check = st.session_state.mock_user_normal
+                elif email == st.session_state.mock_user.get('email', 'N/A') and password == st.session_state.mock_user.get('password', 'N/A'):
+                    # 회원가입으로 저장된 계정 체크 (이전 로직 유지)
+                    user_to_check = st.session_state.mock_user 
+
+                if (user_to_check and 
+                    user_to_check.get('password') == password):
                     
                     st.success("로그인 성공! 홈 화면으로 이동합니다.")
                     
                     # Mock 사용자 데이터에서 민감 정보(password) 제거 후 저장
-                    user_data = {**mock_user}
+                    user_data = {**user_to_check}
                     user_data.pop('password', None)
                     st.session_state.user_data = user_data
                     
-                    # 페이지 전환
                     navigate(PAGE_HOME)
                     
                 else:
@@ -104,7 +135,7 @@ def render_signup_page():
     default_birth_date = min_date
 
     with st.form("signup_form"):
-        st.write("사용자 정보를 입력해주세요.")
+        st.write("사용자 정보를 입력해주세요. (가입 시 일반 사용자 권한이 부여됩니다)")
         
         email = st.text_input("이메일 주소", key="signup_email")
         password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
@@ -125,7 +156,6 @@ def render_signup_page():
         submitted = st.form_submit_button("회원가입 완료")
 
         if submitted:
-            # 유효성 검사 및 Mock 데이터 저장 로직은 동일합니다.
             if not all([email, password, school_name, class_number, student_name, birth_date]):
                 st.error("모든 필드를 입력해 주세요.")
             elif len(password) < 6:
@@ -133,19 +163,19 @@ def render_signup_page():
             elif birth_date < min_date or birth_date > today:
                  st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
             else:
-                # Mock 데이터 저장 
-                st.session_state.mock_user = {
+                # 일반 사용자 Mock 데이터 저장 (이 정보로 로그인을 시도할 수 있게 됩니다)
+                st.session_state.mock_user_normal = {
                     'email': email,
                     'password': password, 
                     'schoolName': school_name,
                     'classNumber': class_number,
                     'studentName': student_name,
-                    'birthDate': birth_date.strftime("%Y-%m-%d")
+                    'birthDate': birth_date.strftime("%Y-%m-%d"),
+                    'isAdmin': False # 일반 사용자
                 }
                 
                 st.success(f"{student_name}님, 회원가입이 완료되었습니다! 이제 이 정보로 로그인해 주세요.")
                 
-                # 페이지 전환
                 navigate(PAGE_LOGIN)
 
     st.markdown("---")
@@ -153,33 +183,31 @@ def render_signup_page():
         navigate(PAGE_LOGIN)
 
 def render_home_page():
-    """
-    홈 화면을 렌더링합니다. (Tailwind CSS 디자인이 적용된 HTML 컴포넌트를 사용하여 형태 복구)
-    """
-    user_name = "사용자"
+    """홈 화면을 렌더링합니다. (HTML 컴포넌트 사용)"""
     user_info = st.session_state.user_data
-    if user_info and user_info.get('studentName'):
-        user_name = user_info['studentName']
-        
-    # === 요청된 문구 수정 반영: '잡스트레블링 (Job-Trekking) 메인 화면 💼' -> '잡스트레블링 메인 화면 💼'
+    user_name = user_info.get('studentName', '사용자')
+    is_admin = user_info.get('isAdmin', False)
+
     st.title("잡스트레블링 메인 화면 💼")
+    st.write(f"환영합니다, **{user_name}**님! 아래는 **'홈 화면'**의 콘텐츠입니다.")
     
-    # === 요청된 문구 수정 반영: '홈 화면 (업데이트됨)' -> '홈 화면'
-    st.write(f"환영합니다, **{user_name}**님! 아래는 '홈 화면'의 콘텐츠입니다.")
-    
+    # 관리자 기능 버튼 추가
+    if is_admin:
+        if st.button("새 프로그램 추가 (관리자 전용)", key="add_program_btn"):
+            navigate(PAGE_ADD_PROGRAM)
+
     # home.html 파일 읽기
     html_content = read_html_file('home.html')
     
     if html_content:
         # 사용자 이름 등 동적 데이터를 HTML에 주입
-        # 이름 외에 학교, 반 정보도 함께 전달
         html_content = html_content.replace('{{USER_NAME}}', user_name)
         html_content = html_content.replace('{{USER_SCHOOL}}', user_info.get('schoolName', '학교 정보 없음'))
         html_content = html_content.replace('{{USER_CLASS}}', user_info.get('classNumber', '반 정보 없음'))
         
         components.html(
             html_content,
-            height=700, # 충분한 높이 확보
+            height=700,
             scrolling=True,
         )
     
@@ -187,6 +215,65 @@ def render_home_page():
     if st.button("로그아웃"):
         st.session_state.user_data = None
         navigate(PAGE_LOGIN)
+
+# --- 새로운 페이지 함수 (프로그램 목록) ---
+
+def render_program_list_page():
+    """Firestore에서 프로그램을 로드하고 표시하는 페이지를 렌더링합니다."""
+    st.title("진로 프로그램 검색 결과 🔎")
+    st.info("이 페이지의 프로그램 목록은 Firebase Firestore에서 실시간으로 로드됩니다.")
+
+    # Firebase Config 및 Auth Token을 HTML 컴포넌트로 전달
+    # 이 데이터는 HTML 파일 내의 JavaScript가 Firebase SDK를 초기화하고 Firestore와 통신하는 데 사용됩니다.
+    program_list_html = read_html_file('program_list.html')
+    
+    if program_list_html:
+        # Streamlit 컴포넌트 내에서 사용할 Firebase 설정 변수 주입
+        program_list_html = program_list_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
+        program_list_html = program_list_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
+        program_list_html = program_list_html.replace('{{APP_ID}}', appId)
+        
+        components.html(
+            program_list_html,
+            height=800,
+            scrolling=True,
+        )
+
+    st.markdown("---")
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_list"):
+        navigate(PAGE_HOME)
+
+# --- 새로운 페이지 함수 (프로그램 추가 - 관리자 전용) ---
+
+def render_add_program_page():
+    """관리자가 새 프로그램을 Firestore에 추가할 수 있는 폼을 렌더링합니다."""
+    if not st.session_state.user_data or not st.session_state.user_data.get('isAdmin', False):
+        st.error("접근 권한이 없습니다.")
+        navigate(PAGE_HOME)
+        return
+
+    st.title("새 진로 프로그램 추가 (관리자 전용) ✏️")
+    st.info("여기에 입력된 프로그램은 Firestore에 저장되어 실시간 목록에 반영됩니다.")
+
+    # HTML 컴포넌트를 사용하여 프로그램 추가 폼을 렌더링합니다.
+    add_program_html = read_html_file('add_program.html')
+
+    if add_program_html:
+        # Streamlit 컴포넌트 내에서 사용할 Firebase 설정 변수 주입
+        add_program_html = add_program_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
+        add_program_html = add_program_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
+        add_program_html = add_program_html.replace('{{APP_ID}}', appId)
+
+        components.html(
+            add_program_html,
+            height=600,
+            scrolling=False,
+        )
+    
+    st.markdown("---")
+    if st.button("프로그램 목록 보기", key="back_to_list_from_add"):
+        navigate(PAGE_PROGRAM_LIST)
+
 
 # --- 5. 메인 렌더링 루프 ---
 
@@ -198,10 +285,13 @@ elif st.session_state.current_page == PAGE_SIGNUP:
     render_signup_page()
 elif st.session_state.current_page == PAGE_HOME and current_user_authenticated:
     render_home_page()
+elif st.session_state.current_page == PAGE_PROGRAM_LIST and current_user_authenticated:
+    render_program_list_page()
+elif st.session_state.current_page == PAGE_ADD_PROGRAM and current_user_authenticated:
+    render_add_program_page()
 else:
-    # 인증되지 않은 상태에서 홈 화면 접근 시 로그인 페이지로 리다이렉션
+    # 인증되지 않은 상태에서 접근 시 로그인 페이지로 리다이렉션
     st.session_state.current_page = PAGE_LOGIN
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
-
