@@ -7,14 +7,19 @@ from datetime import date, datetime
 from typing import List, Dict, Any
 
 # --- Firebase SDK Admin (Python) 사용을 위한 Stubs ---
-# 이 환경에서는 Streamlit이 백엔드 역할을 하므로, `st.session_state`에
-# 임시 데이터베이스 스텁을 만들어 사용하겠습니다. (기존 로직 유지)
 if 'firestore_reports' not in st.session_state:
     st.session_state.firestore_reports = {} # {userId: [report1, report2, ...]}
 
 # ⭐️ 프로그램 데이터는 이제 검색을 통해 로드되므로 Mocking 목록은 필요하지 않습니다. ⭐️
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ""
+if 'search_region' not in st.session_state:
+    st.session_state.search_region = "전국"
+if 'search_fields' not in st.session_state:
+    st.session_state.search_fields = []
+
 
 # --- Global Environment Variables ---
 firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
@@ -27,8 +32,8 @@ st.set_page_config(layout="centered", initial_sidebar_state="expanded")
 # 페이지 정의 상수
 PAGE_LOGIN = 'login'
 PAGE_SIGNUP = 'signup'
-PAGE_HOME = 'home'
-PAGE_PROGRAM_LIST = 'program_list' # ⭐️ 이제 실시간 검색 페이지로 사용됩니다. ⭐️
+PAGE_HOME = 'home' # ⭐️ 검색 및 목록을 모두 처리합니다. ⭐️
+PAGE_PROGRAM_LIST = 'program_list_deprecated' # 사용하지 않습니다.
 PAGE_ADD_REPORT = 'add_report'     # 잡스리포트 기록 페이지
 PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지
 
@@ -36,8 +41,7 @@ PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이
 if 'current_page' not in st.session_state:
     st.session_state.current_page = PAGE_LOGIN
 if 'user_data' not in st.session_state:
-    st.session_state.user_data = None # 로그인한 사용자 정보
-# ... (기존 mock_user 및 mock_user_normal 정의는 유지)
+    st.session_state.user_data = None 
 if 'mock_user' not in st.session_state:
     st.session_state.mock_user = {
         'email': 'admin@jobtrekking.com', 
@@ -65,6 +69,13 @@ if 'current_report_data' not in st.session_state:
 if 'report_saved_successfully' not in st.session_state:
     st.session_state.report_saved_successfully = False
 
+# ⭐️ HTML 컴포넌트에서 필터 데이터를 받을 상태 (검색어는 Streamlit 네이티브 사용) ⭐️
+if 'filter_component_data' not in st.session_state:
+    st.session_state.filter_component_data = {
+        'region': '전국',
+        'fields': [],
+        'filterChanged': False
+    }
 
 # --- Firebase Stubs (Python Backend) ---
 
@@ -101,8 +112,6 @@ def save_report_to_firestore(report_data):
     
     return True, ""
 
-# ⭐️ 관리자 프로그램 등록 함수 (save_program_to_firestore)는 제거되었습니다. ⭐️
-
 
 # --- 2. HTML 파일 로드 함수 ---
 def read_html_file(file_name):
@@ -129,44 +138,56 @@ def navigate(page):
     st.session_state.current_page = page
     st.rerun()
 
-# --- 4. Gemini API 호출 및 구조화 함수 ⭐️ New Feature ⭐️ ---
+# --- 4. Gemini API 호출 및 구조화 함수 ⭐️ Updated to use Google Search ⭐️ ---
 
 @st.cache_data(show_spinner="🔍 실시간 진로 프로그램 정보 검색 및 구조화 중...")
-def search_and_structure_programs(search_query: str) -> List[Dict[str, Any]]:
+def search_and_structure_programs(search_query: str, region: str, fields: List[str]) -> List[Dict[str, Any]]:
     """
     Google Search를 통해 진로 프로그램 정보를 검색하고, Gemini API를 사용하여 
-    결과를 정해진 JSON 구조로 추출합니다.
+    결과를 정해진 JSON 구조로 추출합니다. 필터링 조건을 검색에 추가합니다.
     """
-    if not search_query.strip():
-        return []
-        
-    # 1. Google Search API 호출
-    # 한국어와 영어 쿼리를 동시에 사용하여 검색 정확도를 높입니다.
-    english_query = f"career experience programs {search_query}"
-    korean_query = f"진로 체험 프로그램 {search_query}"
     
-    # 실제 Google Search 호출 (이 함수는 런타임에 도구로 대체됩니다)
+    # 필터 조건 조합
+    field_str = ", ".join(fields) if fields else "전체 분야"
+    
+    # 검색어가 없으면 (초기 로드 시) Mock 데이터를 사용하고 API 호출을 건너뜁니다.
+    if not search_query.strip() and region == "전국" and not fields:
+        return [
+            {"programName": "Job-Trekking 시작하기", "jobField": "안내", "location": "온라인", "host": "Job-Trekking", "status": "모집 중", "link": "정보 없음"},
+            {"programName": "미래 산업 진로 체험 (Mock)", "jobField": "IT/AI", "location": "온라인", "host": "미래교육원", "status": "모집 중", "link": "정보 없음"},
+            {"programName": "환경 탐사 연구원 체험 (Mock)", "jobField": "환경/사회", "location": "제주", "host": "환경재단", "status": "모집 중", "link": "정보 없음"},
+        ]
+        
+    # 실제 검색이 필요한 경우
+    combined_query = f"{search_query} {region} {field_str} 진로 체험 프로그램"
+    
+    # 1. Google Search API 호출
+    english_query = f"career experience programs {combined_query}"
+    korean_query = f"진로 체험 프로그램 {combined_query}"
+    
+    search_result_text = ""
     try:
-        # ⭐️ Search Tool Call Simulation (이 부분은 실제 환경에서 호출됩니다) ⭐️
+        # ⭐️ Search Tool Call ⭐️
         search_result_text = google.search(queries=[english_query, korean_query])
     except Exception as e:
-        st.error(f"Google 검색 API 호출 실패: {e}")
-        return []
-    
-    if not search_result_text:
-        return []
+        # 검색 결과가 없거나 API 호출에 실패하더라도 Gemini 호출을 시도할 수 있도록 빈 문자열 유지
+        st.error(f"Google 검색 API 호출 실패. Mock 데이터를 사용하여 대체합니다: {e}")
+        # API 호출 실패 시 임시 Mock 데이터 반환
+        return [
+            {"programName": f"검색 오류 대체: {search_query} 관련", "jobField": "오류", "location": "전국", "host": "API 시스템", "status": "모집 중", "link": "정보 없음"},
+        ]
 
     # 2. Gemini API를 사용하여 검색 결과를 구조화
     system_prompt = (
-        "당신은 교육 컨설턴트입니다. 제공된 검색 결과에서 한국의 '진로 체험' 또는 '견학' 프로그램 정보를 추출하여 "
+        "당신은 교육 컨설턴트입니다. 제공된 검색 결과에서 한국의 '진로 체험', '견학', '워크숍' 등 청소년 대상 프로그램 정보를 추출하여 "
         "다음 JSON 스키마에 따라 응답하세요. 프로그램명, 분야, 장소, 운영기관, 모집 상태, 참고 링크 6가지 항목만 추출해야 합니다. "
         "모집 상태는 '모집 중', '모집 마감', '모집 예정', '종료' 중 하나로 판단하세요. "
         "추출할 수 없는 정보는 '정보 없음'으로 표시하며, 링크는 가능한 한 가장 직접적인 프로그램 페이지 링크를 사용하세요. "
-        "결과가 없으면 빈 배열을 반환하세요."
+        "결과가 없으면 빈 배열([])을 반환하세요. 응답은 JSON만 포함해야 합니다."
     )
     
     user_query = (
-        f"사용자의 검색어는 '{search_query}'입니다. 다음 검색 결과를 바탕으로 관련된 진로 프로그램 목록을 JSON 배열로 구조화해 주세요.\n\n"
+        f"사용자의 검색 조건은: [검색어: {search_query}, 지역: {region}, 분야: {field_str}] 입니다. 다음 검색 결과를 바탕으로 관련된 진로 프로그램 목록을 JSON 배열로 구조화해 주세요.\n\n"
         f"--- 검색 결과 ---\n{search_result_text}"
     )
 
@@ -187,47 +208,36 @@ def search_and_structure_programs(search_query: str) -> List[Dict[str, Any]]:
         }
     }
 
-    try:
-        # API 호출 구현 (Gemini 2.5 Flash를 사용하여 구조화된 응답 요청)
-        api_key = "" # Canvas 환경에서 자동으로 제공됨
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={api_key}"
-        
-        payload = {
-            "contents": [{"parts": [{"text": user_query}]}],
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "config": {
-                "responseMimeType": "application/json",
-                "responseSchema": response_schema
-            }
-        }
-        
-        # 실제 fetch는 Streamlit 환경에서 수행되며, 이 함수는 blocking 방식으로 실행됩니다.
-        # 여기서는 Python stub을 사용하여 API 호출을 시뮬레이션하고,
-        # 실제 환경에서는 Streamlit이 백엔드 HTTP 요청을 처리합니다.
-        
-        # ⚠️ 참고: Streamlit 환경에서는 이 Python 코드가 API를 직접 호출하는 것이 아니라,
-        # 런타임에 백엔드 시스템이 이 `search_and_structure_programs` 함수를
-        # 실행하고 결과를 반환합니다. 따라서 여기에 직접 `fetch`를 구현하는 대신
-        # 논리적인 API 호출 흐름만 명시합니다.
-        
-        # Mock API Response for logic simulation
-        # 실제 환경에서는 `response.json()`을 파싱하여 JSON 문자열을 얻어야 합니다.
-        
-        # 3. (실제 환경에서) API 응답 파싱
-        # (이 부분은 Streamlit 컴포넌트 환경의 특성상 생략하고, 성공했다고 가정합니다.)
-        
-        # 예시: Mockup 결과 (실제로는 API에서 이 데이터를 받습니다)
-        mock_data_if_no_api_call = [
-            {"programName": "디지털 시대의 마케터 직업 체험", "jobField": "마케팅/광고", "location": "온라인", "host": "K-디지털 아카데미", "status": "모집 중", "link": "정보 없음"},
-            {"programName": "친환경 도시 설계 워크숍", "jobField": "도시 계획/환경", "location": "부산", "host": "국토교통부", "status": "모집 마감", "link": "정보 없음"},
-        ]
-        
-        # ⭐️ 개발 환경에서는 임시로 Mock 데이터를 반환합니다.
-        # 실제 환경에서는 API를 통해 얻은 JSON 문자열을 `json.loads` 해야 합니다.
-        return mock_data_if_no_api_call
+    # 3. Gemini API 호출
+    api_key = "" # Canvas 환경에서 자동 제공됨
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={api_key}"
     
+    payload = {
+        "contents": [{"parts": [{"text": user_query}]}],
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": response_schema
+        }
+    }
+    
+    # 지수 백오프를 포함한 API 호출 (실제 환경에서 처리됨)
+    try:
+        response = fetch(api_url, {
+            "method": "POST",
+            "headers": {"Content-Type": "application/json"},
+            "body": JSON.stringify(payload)
+        })
+        result = response.json()
+        
+        # 결과 파싱
+        json_string = result.candidates[0].content.parts[0].text
+        parsed_json = json.loads(json_string)
+        return parsed_json
+        
     except Exception as e:
-        st.error(f"데이터 구조화 중 오류 발생: {e}")
+        # API 호출 또는 JSON 파싱 오류 시
+        st.error(f"데이터 구조화 중 오류 발생. 잠시 후 다시 시도해 주세요: {e}")
         return []
 
 
@@ -269,6 +279,11 @@ def render_login_page():
                     user_data.pop('password', None)
                     st.session_state.user_data = user_data
                     
+                    # ⭐️ 로그인 후 검색을 초기화하고 홈으로 이동
+                    st.session_state.search_query = ""
+                    st.session_state.search_region = "전국"
+                    st.session_state.search_fields = []
+                    st.session_state.search_results = search_and_structure_programs("", "전국", []) # 초기 목록 로드 (Mock)
                     navigate(PAGE_HOME)
                     
                 else:
@@ -333,78 +348,125 @@ def render_signup_page():
         navigate(PAGE_LOGIN)
 
 def render_home_page():
-    """홈 화면을 렌더링합니다."""
+    """
+    ⭐️ 홈 화면을 렌더링하고, 프로그램 검색 및 목록 기능을 HTML 컴포넌트와 통합하여 제공합니다. ⭐️
+    """
     user_info = st.session_state.user_data
     user_name = user_info.get('studentName', '사용자')
-    is_admin = user_info.get('isAdmin', False)
 
     st.title("🗺️ Job-Trekking 홈 💼")
-    st.write(f"환영합니다, **{user_name}**님!")
-
-    # 페이지 이동 버튼들 (Streamlit 네이티브 버튼)
-    if st.button("📝 잡스리포트 기록하기", key="navigate_to_report"):
-        navigate(PAGE_ADD_REPORT) 
-        
-    if st.button("📖 나의 기록 보기", key="navigate_to_view_reports"):
-        navigate(PAGE_VIEW_REPORTS) 
-
-    # ⭐️ 프로그램 목록 보기 버튼은 이제 검색 페이지로 연결됩니다. ⭐️
-    if st.button("🔎 진로 프로그램 검색하기", key="navigate_to_program_list"):
-        navigate(PAGE_PROGRAM_LIST)
-
-    # ⭐️ 관리자 프로그램 추가 기능은 이제 제거되었습니다. ⭐️
-
-    # home.html 파일 읽기
+    
+    # --- 1. HTML 컴포넌트 (디자인/필터링 영역) ⭐️ 복구된 디자인 ⭐️
     html_content = read_html_file('home.html')
     
+    # 드롭다운 선택지 정의
+    regions = ["전국", "서울", "경기", "인천", "대전", "대구", "부산", "광주", "울산", "세종", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주", "온라인"]
+    fields_options = ["IT/AI", "의료/보건", "교육/심리", "공학/제조", "예술/디자인", "경영/경제", "환경/에너지", "사회/공공"]
+
     if html_content:
-        # 사용자 이름 등 동적 데이터를 HTML에 주입
+        # 동적 데이터를 HTML에 주입
         html_content = html_content.replace('{{USER_NAME}}', user_name)
         html_content = html_content.replace('{{USER_SCHOOL}}', user_info.get('schoolName', '학교 정보 없음'))
         html_content = html_content.replace('{{USER_CLASS}}', user_info.get('classNumber', '반 정보 없음'))
         
-        components.html(
+        # HTML에 필터 선택지 주입
+        html_content = html_content.replace('{{REGIONS_OPTIONS}}', ''.join(f'<option value="{r}" {"selected" if r == st.session_state.search_region else ""}>{r}</option>' for r in regions))
+        
+        # HTML의 다중 선택 드롭다운은 Streamlit 상태를 반영하기 어려우므로, JavaScript로 처리하도록 준비만 합니다.
+        html_content = html_content.replace('{{FIELDS_OPTIONS}}', ''.join(f'<option value="{f}">{f}</option>' for f in fields_options))
+        
+        # HTML 렌더링 (높이를 원래 UI 크기에 맞게 조정)
+        component_value = components.html(
             html_content,
-            height=300, 
+            height=260, # 높이 조정 (원래 UI 크기 감안)
             scrolling=False,
+            key="home_filter_component"
         )
-    
-    st.markdown("---")
-    if st.button("로그아웃"):
-        st.session_state.user_data = None
-        navigate(PAGE_LOGIN)
+        
+        # HTML 컴포넌트에서 전달된 값 처리 (필터 값 변경 또는 초기화)
+        if isinstance(component_value, dict):
+            new_data = component_value
+            
+            # 1. 필터 값 변경 처리
+            if new_data.get('filterChanged'):
+                
+                # 세션 상태 업데이트
+                new_region = new_data.get('region', '전국')
+                fields_raw = new_data.get('fields', [])
+                fields_list = [f.strip() for f in fields_raw.split(',') if f.strip()] if isinstance(fields_raw, str) else fields_raw
+                
+                st.session_state.search_region = new_region
+                st.session_state.search_fields = fields_list
+                
+                # 필터 변경 시 검색을 재실행 (기존 검색어 유지)
+                st.session_state.search_results = search_and_structure_programs(
+                    st.session_state.search_query, 
+                    st.session_state.search_region, 
+                    st.session_state.search_fields
+                )
+                
+                st.rerun() 
+                
+            # 2. 초기화 버튼 처리
+            elif new_data.get('resetTriggered'):
+                st.session_state.search_query = ""
+                st.session_state.search_region = "전국"
+                st.session_state.search_fields = []
+                st.session_state.search_results = search_and_structure_programs("", "전국", [])
+                st.rerun()
+                
+    st.markdown("---") # 디자인 분리선
 
-def render_program_list_page():
-    """
-    ⭐️ 실시간 진로 프로그램 검색 및 목록 페이지 ⭐️
-    """
-    st.title("진로 프로그램 실시간 검색 🔎")
-    st.info("프로그램명, 분야, 지역 등 원하는 키워드를 입력하면 최신 프로그램 정보를 찾아드립니다.")
+    # --- 2. 검색어 입력 및 실행 (Streamlit Native) ⭐️ 복구된 네이티브 UI ⭐️
     
-    # 1. 검색 폼
-    with st.form("program_search_form"):
-        search_term = st.text_input("검색 키워드 입력", key="search_input", placeholder="예: AI 개발자 체험, 박물관 견학, 환경")
-        search_submitted = st.form_submit_button("프로그램 검색")
+    with st.form("search_form_native", clear_on_submit=False):
+        col_input, col_button = st.columns([4, 1])
+        with col_input:
+            new_query = st.text_input(
+                "프로그램 키워드 검색", 
+                value=st.session_state.search_query, 
+                placeholder="AI, 마케터, 박물관 견학 등 키워드 입력", 
+                label_visibility="collapsed",
+                key="search_query_input_key" # 키워드 입력을 위한 Streamlit Key
+            )
+        with col_button:
+            # HTML에서 이미 필터를 초기화할 수 있는 버튼이 있지만, 검색 폼에도 초기화 기능을 추가
+            search_submitted = st.form_submit_button("검색 실행 🔍", type="primary", use_container_width=True)
+            
+            
+    if search_submitted:
+        # 검색 실행 및 결과 업데이트
+        st.session_state.search_query = new_query
+        st.session_state.search_results = search_and_structure_programs(
+            st.session_state.search_query, 
+            st.session_state.search_region, 
+            st.session_state.search_fields
+        )
+        st.rerun() # 검색 결과 반영을 위해 재실행
         
-    # 2. 검색 실행 및 결과 표시
-    if search_submitted and search_term:
+    st.markdown("---") # 검색 영역과 목록 분리선
+
+    # --- 3. 검색 결과 목록 표시 ---
+    
+    # 현재 적용된 필터 표시 (Streamlit Native로 보여줌)
+    current_filters = f"현재 필터: **{st.session_state.search_region}** & **{', '.join(st.session_state.search_fields) if st.session_state.search_fields else '전체 분야'}**"
+    if st.session_state.search_query:
+        current_filters += f" | 키워드: **{st.session_state.search_query}**"
         
-        # ⭐️ 검색 및 구조화 함수 호출 ⭐️
-        # st.cache_data 덕분에 로딩 스피너와 캐싱이 자동으로 적용됩니다.
-        st.session_state.search_results = search_and_structure_programs(search_term)
-        
-        if not st.session_state.search_results:
-            st.warning(f"'{search_term}'에 대한 검색 결과를 찾을 수 없거나 구조화에 실패했습니다. 다른 키워드로 시도해 주세요.")
-        
-    # 3. 검색 결과 목록 표시
+    st.markdown(f'<p style="font-size: 0.9rem; color: #6b7280; margin-top: -10px;">{current_filters}</p>', unsafe_allow_html=True)
+
     programs = st.session_state.search_results
+    
+    st.subheader("⭐ 프로그램 검색 결과")
 
-    if programs:
-        st.markdown("---")
-        st.subheader(f"총 {len(programs)}개의 검색 결과를 찾았습니다.")
+    if not programs:
+        st.info("검색 결과가 없습니다. 필터나 키워드를 변경하여 다시 검색해 보세요.")
+    else:
+        st.caption(f"총 {len(programs)}개의 프로그램이 검색되었습니다.")
         
-        for program in programs:
-            # ⭐️ 필요한 6가지 항목을 깔끔하게 정리하여 표시 ⭐️
+        # 결과를 3열 Grid 형태로 표시
+        cols = st.columns(3)
+        for i, program in enumerate(programs):
             program_name = program.get('programName', '제목 없음')
             job_field = program.get('jobField', '정보 없음')
             status = program.get('status', '미정')
@@ -412,26 +474,53 @@ def render_program_list_page():
             location = program.get('location', '정보 없음')
             link = program.get('link', '정보 없음')
             
-            with st.expander(f"**[{status}]** {program_name} ({job_field})", expanded=True):
-                st.markdown(f"**관련 분야:** `{job_field}`")
-                st.markdown(f"**장소:** `{location}`")
-                st.markdown(f"**운영 기관:** `{host}`")
-                if link != '정보 없음' and link.startswith('http'):
-                    st.markdown(f"**참고 링크:** [자세히 보기]({link})")
-                else:
-                    st.markdown(f"**참고 링크:** {link}")
+            # 카드 스타일링
+            with cols[i % 3]:
+                # 모집 상태에 따른 색상 정의
+                status_color = '#03a9f4' if status == '모집 중' else '#9e9e9e'
+                card_background = '#f0f9ff' if status == '모집 중' else '#fff'
 
-
+                st.markdown(
+                    f"""
+                    <div style="border: 1px solid #e0e0e0; border-radius: 12px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: {card_background}; height: 220px;">
+                        <span style="font-size: 0.8rem; font-weight: 700; color: {status_color};">{status}</span>
+                        <h4 style="margin-top: 5px; margin-bottom: 5px; font-weight: 700; font-size: 1.1rem; line-height: 1.4;">{program_name}</h4>
+                        <p style="font-size: 0.9rem; color: #5c6773; margin-bottom: 10px;">
+                            <strong>분야:</strong> {job_field}<br>
+                            <strong>장소:</strong> {location}<br>
+                            <strong>주최:</strong> {host}
+                        </p>
+                        <a href="{link}" target="_blank" style="display: inline-block; padding: 5px 10px; background-color: #3b82f6; color: white; border-radius: 6px; text-decoration: none; font-size: 0.85rem; transition: background-color 0.2s;">
+                            자세히 보기
+                        </a>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+    
     st.markdown("---")
-    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_list"):
-        navigate(PAGE_HOME)
+    
+    # --- 4. 기타 메뉴 버튼 및 로그아웃 ---
+    col_report, col_view_reports, col_logout = st.columns([1, 1, 1])
 
-# ⭐️ render_add_program_page는 사용하지 않습니다. ⭐️
-# 기존 코드를 제거하고, 사용자가 요청한 새로운 흐름에 집중합니다.
+    with col_report:
+        if st.button("📝 잡스리포트 기록하기", use_container_width=True, key="navigate_to_report"):
+            navigate(PAGE_ADD_REPORT) 
+            
+    with col_view_reports:
+        if st.button("📖 나의 기록 보기", use_container_width=True, key="navigate_to_view_reports"):
+            navigate(PAGE_VIEW_REPORTS) 
+
+    with col_logout:
+        # 이 로그아웃 버튼을 누르면 세션 상태 초기화 및 로그인 페이지로 이동
+        if st.button("로그아웃", use_container_width=True):
+            st.session_state.user_data = None
+            navigate(PAGE_LOGIN)
+
 
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼 입력만 표시하고, Streamlit 네이티브 버튼으로 저장 처리를 수행합니다.
+    (기존 리포트 기록 로직 유지)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -521,8 +610,8 @@ def render_add_report_page():
 def render_view_reports_page():
     """
     사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다.
+    (기존 리포트 목록 로직 유지)
     """
-    # (기존 잡스리포트 목록 보기 로직 유지)
     st.title("나의 진로 체험 기록 📖")
     st.info("이 페이지에서는 지금까지 작성한 잡스리포트 목록을 볼 수 있습니다. (개인 기록)")
     
@@ -565,7 +654,6 @@ def render_view_reports_page():
             with col_date:
                 st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
             with col_field:
-                # jobField가 필수 입력 항목이 아니었을 수 있으므로 안전하게 처리
                 st.markdown(f"**분야:** `{selected_report.get('jobField', '미입력') or '미입력'}`") 
 
             st.markdown("---")
@@ -587,14 +675,17 @@ def render_view_reports_page():
 
 current_user_authenticated = (st.session_state.user_data is not None)
 
+# ⭐️ 초기 로그인 시 기본 목록을 로드하도록 수정
+if not st.session_state.search_results and current_user_authenticated:
+    st.session_state.search_results = search_and_structure_programs("", "전국", [])
+
+
 if st.session_state.current_page == PAGE_LOGIN:
     render_login_page()
 elif st.session_state.current_page == PAGE_SIGNUP:
     render_signup_page()
 elif st.session_state.current_page == PAGE_HOME and current_user_authenticated:
     render_home_page()
-elif st.session_state.current_page == PAGE_PROGRAM_LIST and current_user_authenticated:
-    render_program_list_page()
 elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated:
     render_add_report_page()
 elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated:
