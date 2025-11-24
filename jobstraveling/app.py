@@ -37,9 +37,12 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 def get_login_html_content():
     """
     로그인 페이지를 위한 정적 HTML 템플릿을 반환합니다. 
-    r''' 접두사 없이, 모든 중괄호를 {{ }} 형태로 강제 이스케이프하여 Streamlit 충돌을 방지합니다.
+    Raw String (r'''')을 다시 사용하여 멀티라인 문자열을 안전하게 정의하고, 
+    모든 중괄호를 {{ }} 형태로 강제 이스케이프하여 Streamlit 충돌을 방지합니다.
     """
-    html = """
+    # Raw String을 사용하여 문자열 내 백슬래시 등을 안전하게 처리하면서도,
+    # 중괄호는 {{ }} 형태로 유지하여 Python 포맷팅을 방지합니다.
+    html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -95,8 +98,6 @@ def get_login_html_content():
 </body>
 </html>
     """
-    # 마지막 시도: 모든 중괄호를 이스케이프하여 반환
-    # (이미 템플릿 내에서 {{ }} 형태로 되어 있으므로, 이 함수 내에서는 join()이나 추가적인 처리를 하지 않습니다.)
     return html
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
@@ -536,10 +537,11 @@ def render_login_page():
     st.title("Job-Trekking")
     st.markdown(" ") # 여백
 
-    # 로그인 HTML 콘텐츠를 가져옵니다. (강제 이스케이프 적용)
+    # 로그인 HTML 콘텐츠를 가져옵니다. (Raw String + 이중 이스케이프)
     login_html_content = get_login_html_content()
 
     # 정적 로그인 페이지 HTML 렌더링
+    # 여기서 .format() 호출 없이 순수한 문자열을 전달하는 것이 중요합니다.
     component_value = components.html(
         login_html_content,
         height=700,
