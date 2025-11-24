@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로그램 목록</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        }
+        /* 로딩 스피너 스타일 */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-6">
+
+    <div id="loading-indicator" class="flex justify-center items-center h-full">
+        <div class="spinner"></div>
+        <p class="ml-3 text-lg text-gray-600">프로그램 목록을 불러오는 중...</p>
+    </div>
+
+    <div id="program-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- 프로그램 카드가 여기에 삽입됩니다. -->
+    </div>
+    
+    <div id="empty-message" class="hidden text-center p-10 text-gray-500">
+        <p class="text-xl font-medium">아직 등록된 프로그램이 없습니다. 관리자에게 문의하세요.</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // setLogLevel('debug'); // 디버그 로그 활성화 (옵션)
+
+        // 1. Streamlit Python에서 주입된 변수 사용
+        const firebaseConfig = JSON.parse('{{FIREBASE_CONFIG}}');
+        const initialAuthToken = '{{INITIAL_AUTH_TOKEN}}';
+        const appId = '{{APP_ID}}';
+
+        let app, db, auth;
+        let unsubscribe = null; // 실시간 리스너 해제 함수
+
+        // 2. Firebase 초기화 및 인증
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // 캔버스 환경에서 제공된 토큰으로 인증 시도 (필수)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                const userId = auth.currentUser?.uid || 'anonymous';
+                console.log("Firebase initialized. User ID:", userId);
+
+                // 3. Firestore 리스너 설정
+                setupProgramListener(userId);
+
+            } catch (error) {
+                console.error("Firebase 초기화 또는 인증 실패:", error);
+                document.getElementById('loading-indicator').innerHTML = 
+                    `<p class="text-red-500">데이터 로드 실패: ${error.message}</p>`;
+            }
+        }
+        
+        // 4. Firestore 실시간 리스너
+        function setupProgramListener(userId) {
+            // 프로그램 데이터는 모든 사용자가 볼 수 있는 공개 경로에 저장합니다.
+            const collectionPath = `/artifacts/${appId}/public/data/programs`;
+            const q = query(collection(db, collectionPath));
+            
+            const programListDiv = document.getElementById('program-list');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const emptyMessage = document.getElementById('empty-message');
+
+            // onSnapshot을 사용하여 실시간으로 데이터를 수신합니다.
+            unsubscribe = onSnapshot(q, (querySnapshot) => {
+                loadingIndicator.classList.add('hidden'); // 로딩 숨김
+                programListDiv.innerHTML = ''; // 기존 목록 초기화
+                const programs = [];
+
+                querySnapshot.forEach((doc) => {
+                    programs.push({ id: doc.id, ...doc.data() });
+                });
+
+                if (programs.length === 0) {
+                    emptyMessage.classList.remove('hidden');
+                } else {
+                    emptyMessage.classList.add('hidden');
+                    programs.forEach(program => {
+                        programListDiv.appendChild(createProgramCard(program));
+                    });
+                }
+            }, (error) => {
+                console.error("Firestore 데이터 수신 실패:", error);
+                loadingIndicator.innerHTML = 
+                    `<p class="text-red-500">프로그램 목록 로드 중 오류 발생: ${error.message}</p>`;
+            });
+        }
+        
+        // 5. 프로그램 카드 생성 함수
+        function createProgramCard(program) {
+            const card = document.createElement('a');
+            
+            // 프로그램 웹사이트 URL로 직접 연결
+            card.href = program.websiteUrl;
+            card.target = "_blank"; // 새 탭에서 열기
+            
+            card.className = 'card border-l-4 border-indigo-500 hover:border-indigo-700 transition duration-200';
+            
+            card.innerHTML = `
+                <h3 class="text-xl font-bold text-gray-800 mb-2">${program.title}</h3>
+                <p class="text-sm text-gray-600 mb-3">${program.description.substring(0, 100)}...</p>
+                <div class="flex flex-wrap items-center space-x-4 text-xs text-gray-500 mt-2">
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.727A8 8 0 016.343 7.273L12.001 12l5.656-4.727zM20 12h-2m-2-4l-2 2m-4-2l-2 2"></path></svg>
+                        ${program.category || '일반'}
+                    </span>
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        ${program.duration || '기간 미정'}
+                    </span>
+                    <span class="flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.727A8 8 0 016.343 7.273L12 12l5.657-4.727zM20 12h-2m-2-4l-2 2m-4-2l-2 2"></path></svg>
+                        ${program.region || '전국'}
+                    </span>
+                </div>
+            `;
+            return card;
+        }
+
+        // 6. 페이지가 로드되면 Firebase 초기화 시작
+        window.onload = initializeFirebase;
+        
+        // 7. Streamlit 컴포넌트가 언로드될 때 리스너 해제 (메모리 누수 방지)
+        // 이 부분은 Streamlit 환경에서 컴포넌트 라이프사이클을 추적하기 어려워 확실한 보장은 어렵습니다.
+        // 일반적인 웹페이지 환경이 아니므로, Streamlit의 재실행 주기와 함께 리스너가 정리되기를 기대합니다.
+    </script>
+</body>
+</html>
