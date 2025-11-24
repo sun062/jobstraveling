@@ -83,7 +83,7 @@ def save_report_to_firestore(report_data):
     if not user_id:
         return False, "사용자 인증 정보를 찾을 수 없습니다."
 
-    # 필수 필드 유효성 검사
+    # 필수 필드 유효성 검사 (Streamlit 버튼에서 이미 체크하지만, 백엔드에서도 최종 확인)
     if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
         return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
@@ -121,7 +121,6 @@ def navigate(page):
 
 # --- 4. 페이지 렌더링 함수 ---
 
-# (render_login_page, render_signup_page, render_home_page, render_program_list_page, render_add_program_page는 변경 없음)
 def render_login_page():
     """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
     st.title("로그인")
@@ -338,20 +337,21 @@ def render_add_report_page():
     add_report_html = read_html_file('add_report.html')
     
     # HTML 컴포넌트 렌더링 및 JavaScript 데이터 수신을 위한 키 설정
+    # TypeError 방지를 위해 명시적인 인자 전달 및 안전한 컴포넌트 값 처리
     component_value = components.html(
-        add_report_html,
+        html=add_report_html, # 명시적으로 html 인자 전달 (타입 에러 방지 시도)
         height=650,
         scrolling=True,
         key="report_form_html_component"
     )
 
     # 2. HTML 컴포넌트로부터 전달받은 데이터 추출
-    report_data_from_html = None
-    if component_value and isinstance(component_value, dict) and 'reportData' in component_value:
-        report_data_from_html = component_value['reportData']
+    # Streamlit 컴포넌트는 첫 실행 시 None을 반환할 수 있습니다.
+    # component_value가 딕셔너리 형태이고 필요한 키를 포함하는지 확인합니다.
+    if isinstance(component_value, dict) and 'reportData' in component_value:
         # 수신된 데이터를 세션 상태에 저장하여 버튼 클릭 시 사용
-        st.session_state.current_report_data = report_data_from_html
-        
+        st.session_state.current_report_data = component_value['reportData']
+    
     # 3. Streamlit 버튼 배치 (저장 실행 담당)
     st.markdown("---")
     
@@ -374,10 +374,23 @@ def render_add_report_page():
         # 저장 전 상태에서는 Streamlit 버튼을 표시합니다.
         if st.button("🚀 리포트 저장하기", key="submit_report_to_python", type="primary"):
             # 버튼 클릭 시 저장 로직 실행
-            if st.session_state.current_report_data:
+            
+            # current_report_data가 None이거나, 필수 필드가 비어있지 않은지 검증
+            current_data = st.session_state.get('current_report_data')
+            
+            # 필수 필드 체크: programName, experienceDate, rating, reportContent
+            is_valid = (
+                current_data and 
+                current_data.get('programName') and 
+                current_data.get('experienceDate') and 
+                current_data.get('rating') is not None and 
+                current_data.get('reportContent')
+            )
+
+            if is_valid:
                 
                 # 저장 로직 실행
-                success, message = save_report_to_firestore(st.session_state.current_report_data)
+                success, message = save_report_to_firestore(current_data)
                 
                 if success:
                     st.session_state.report_saved_successfully = True
@@ -386,7 +399,7 @@ def render_add_report_page():
                 else:
                     st.error(f"⚠️ 리포트 저장 실패: {message}")
             else:
-                st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목을 입력했는지 확인해 주세요.")
+                st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
 
     st.markdown("---")
     if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
