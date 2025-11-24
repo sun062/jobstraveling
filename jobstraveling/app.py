@@ -24,7 +24,7 @@ PAGE_SIGNUP = 'signup'
 PAGE_HOME = 'home'
 PAGE_PROGRAM_LIST = 'program_list' 
 PAGE_ADD_PROGRAM = 'add_program'   
-PAGE_ADD_REPORT = 'add_report' # 신규 페이지 추가
+PAGE_ADD_REPORT = 'add_report' # 잡스리포트 페이지 상수
 
 # 세션 상태 초기화
 if 'current_page' not in st.session_state:
@@ -74,8 +74,6 @@ def navigate(page):
     st.rerun()
 
 # --- 4. 페이지 렌더링 함수 ---
-
-# (render_login_page, render_signup_page 함수는 변경 없음)
 
 def render_login_page():
     """로그인 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
