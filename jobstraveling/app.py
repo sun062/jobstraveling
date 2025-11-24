@@ -292,14 +292,14 @@ def get_base_html_content():
             const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
 
             const fieldTags = (program.fields || []).map(field => 
-                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${field}</span>`
+                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{field}}</span>`
             ).join('');
 
             card.innerHTML = `
                 <img src="${program.img}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${program.title}" class="w-full h-40 object-cover">
                 <div class="p-4 space-y-2">
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor}">${program.type}</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full {{typeColor}}">${program.type}</span>
                         ${fieldTags}
                     </div>
                     <h3 class="text-lg font-bold text-gray-800 truncate">${program.title}</h3>
@@ -411,7 +411,7 @@ def get_base_html_content():
                 button.setAttribute('data-field', field);
                 
                 const isActive = currentFields.includes(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${isActive ? 'tag-active' : 'tag-inactive'}`;
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition {{isActive ? 'tag-active' : 'tag-inactive'}}`;
                 
                 button.onclick = () => toggleField(field, button);
                 container.appendChild(button);
@@ -464,14 +464,18 @@ def get_base_html_content():
 # --- 3. Streamlit 페이지 렌더링 함수 ---
 def render_home_page():
     
-    # 1. 초기 HTML 콘텐츠를 세션 상태에 저장 및 초기화
+    # 1. BASE HTML 초기화 (1회만 실행)
     if 'base_html' not in st.session_state:
-        # **수정된 부분: escape_curly_braces 함수를 호출하여 HTML을 처리합니다.**
         st.session_state['base_html'] = get_base_html_content()
+        
+    # **수정된 부분: current_html의 존재 여부와 타입 체크를 강화합니다.**
+    # 2. CURRENT HTML 초기화 (Base HTML이 있으면, Current HTML이 없거나 문자열이 아닐 때 초기화)
+    if 'current_html' not in st.session_state or not isinstance(st.session_state['current_html'], str):
         # 최초에는 빈 스크립트를 삽입한 기본 HTML을 사용
         st.session_state['current_html'] = st.session_state['base_html'].format(streamlit_data_script="")
     
-    # 2. HTML 컴포넌트 렌더링
+    # 3. HTML 컴포넌트 렌더링
+    # st.session_state['current_html']은 이제 유효한 문자열임이 보장됩니다.
     component_value = components.html(
         st.session_state['current_html'],
         height=1200, 
@@ -479,7 +483,7 @@ def render_home_page():
         key="home_filter_component"
     )
 
-    # 3. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신)
+    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신)
     if component_value:
         message = component_value
 
@@ -493,7 +497,7 @@ def render_home_page():
                 "fields": FIELDS
             }
             
-            # 4. 데이터 전송을 위한 동적 스크립트 생성
+            # 5. 데이터 전송을 위한 동적 스크립트 생성
             data_json = json.dumps(data_to_send)
             
             streamlit_data_script = f"""
@@ -505,10 +509,10 @@ def render_home_page():
             </script>
             """
             
-            # 5. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
+            # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
             new_html = st.session_state['base_html'].format(streamlit_data_script=streamlit_data_script)
             
-            # 6. 세션 상태 업데이트 및 재실행 요청
+            # 7. 세션 상태 업데이트 및 재실행 요청
             st.session_state['current_html'] = new_html
             st.rerun()
 
