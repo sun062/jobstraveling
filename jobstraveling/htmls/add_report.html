@@ -106,6 +106,12 @@
          * - 데이터 전송 시점의 안정성을 높입니다.
          */
         function sendDataToStreamlit() {
+            // Streamlit 객체가 정의되지 않았으면 실행하지 않음 (안정성 보강)
+            if (typeof Streamlit === 'undefined') {
+                console.error("Streamlit is not defined. Skipping data send.");
+                return;
+            }
+
             // 1. 데이터 수집
             const ratingInput = document.querySelector('input[name="rating"]:checked');
             
@@ -134,10 +140,24 @@
             Streamlit.setFrameHeight();
         }
 
-        // 3. 페이지 로드 시, 초기 값을 Python으로 한 번 전송 (필수)
-        window.onload = function() {
-            sendDataToStreamlit();
-        };
+        /**
+         * Streamlit 객체가 로드될 때까지 기다렸다가 sendDataToStreamlit을 호출하는 함수
+         * 기존 window.onload를 대체하여 Streamlit 정의 시점을 안전하게 확보합니다.
+         */
+        function initializeComponent() {
+            // 50ms마다 Streamlit 객체를 확인하는 폴링 로직
+            const checkStreamlit = setInterval(() => {
+                if (typeof Streamlit !== 'undefined') {
+                    clearInterval(checkStreamlit);
+                    
+                    // 컴포넌트 초기화 완료 후, 초기 값을 Python으로 한 번 전송 (필수)
+                    sendDataToStreamlit(); 
+                }
+            }, 50); // 50ms 간격으로 확인
+        }
+
+        // 3. 페이지 로드 완료 시 컴포넌트 초기화 시작
+        window.onload = initializeComponent;
         
         // 폼의 oninput 이벤트에 의해 sendDataToStreamlit()가 실시간으로 호출되어 데이터 업데이트
     </script>
