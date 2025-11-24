@@ -348,11 +348,11 @@ def render_add_program_page():
     if html_content_safe.strip():
         try:
             # HTML 컴포넌트 렌더링 및 데이터 수신
+            # ⚠️ 오류 해결: key 인수를 제거합니다. ⚠️
             component_value = components.html(
-                html=html_content_safe.replace('{{APP_ID}}', appId), # APP_ID는 Firebase 용이지만, HTML 내에서 데이터 통신용으로 사용될 수 있음
+                html=html_content_safe.replace('{{APP_ID}}', appId),
                 height=700,
-                scrolling=True,
-                key="program_add_component" # key를 명시하여 안정성 확보
+                scrolling=True
             )
         except Exception as e:
             st.error(f"⚠️ 컴포넌트 렌더링 중 오류 발생: {e}")
@@ -430,11 +430,11 @@ def render_add_report_page():
 
     if html_content_safe.strip():
         try:
+            # ⚠️ 오류 해결: key 인수를 제거합니다. ⚠️
             component_value = components.html(
                 html=html_content_safe,
                 height=700, 
-                scrolling=True,
-                key="report_add_component" # key를 명시하여 안정성 확보
+                scrolling=True
             )
         except Exception as e:
             st.error(f"⚠️ 컴포넌트 렌더링 중 Streamlit 내부 오류 발생: {e}. HTML 파일 내용을 다시 확인해 주세요.")
