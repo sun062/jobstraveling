@@ -582,7 +582,7 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다.
-    (HTML 로드 실패 시 TypeError 방지 및 명확한 오류 메시지 제공)
+    (read_html_file의 안정성을 전제하고, 로드 실패 시 명확한 오류 UI를 제공합니다.)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -591,21 +591,24 @@ def render_add_report_page():
     component_value = None
     
     # --------------------------------------------------------------------------
-    # ✨ 최종 수정된 방어 로직: add_report_html이 유효한 내용인지 확인합니다.
+    # ✨ 최종 방어 로직: add_report_html이 유효한 문자열인지 다시 확인합니다.
     # read_html_file이 빈 문자열을 반환하면 (로드 실패), HTML 컴포넌트 렌더링을 건너뜁니다.
     # --------------------------------------------------------------------------
     if not isinstance(add_report_html, str) or not add_report_html.strip():
-        st.error("⚠️ 로드 오류: 리포트 입력 양식 HTML 파일 ('add_report.html')을 찾거나 읽을 수 없습니다.")
-        st.warning("`read_html_file` 함수가 빈 문자열을 반환했습니다. 1) 파일 이름/경로가 정확한지, 2) 파일에 내용이 있는지 확인해 주세요.")
+        # HTML 로드 실패 시 Streamlit에 오류 메시지를 표시하고, components.html 호출을 건너뜁니다.
+        st.error("⚠️ [심각한 오류] 리포트 입력 양식 HTML 파일 ('add_report.html')을 **불러올 수 없습니다**.")
+        st.warning("`read_html_file` 함수가 빈 문자열을 반환했습니다. **파일 경로**와 **파일 내용**을 반드시 확인해 주세요.")
         
         st.markdown("---")
-        # navigate, PAGE_HOME 등의 변수는 외부에서 정의되었다고 가정합니다.
-        if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default_error"):
+        # 오류 상태에서 홈으로 돌아가는 버튼 (다른 버튼들과 key가 겹치지 않도록 명확하게 정의)
+        if st.button("메인 화면으로 돌아가기", key="error_back_to_home"):
+            # navigate, PAGE_HOME 등의 변수는 외부에서 정의되었다고 가정합니다.
             navigate(PAGE_HOME)
         return
     # --------------------------------------------------------------------------
     
-    # HTML이 유효한 문자열일 경우에만 component.html을 호출합니다.
+    # HTML이 유효한 문자열일 경우에만 component.html을 호출합니다. (Line 609 주변)
+    # 이 로직을 통과하면 TypeError는 발생하지 않아야 합니다.
     component_value = components.html(
         html=add_report_html, 
         height=700, # 버튼이 포함되었으므로 높이 증가
@@ -671,9 +674,8 @@ def render_add_report_page():
             st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
 
 
-    # C) 기본 상태 (제출 신호가 없을 때)
-    # 폼이 성공적으로 로드되고 제출 대기 중일 때만 이 버튼이 표시됩니다.
-    elif not st.session_state.get('report_saved_successfully', False):
+    # C) 기본 상태 (제출 신호가 없을 때, HTML 로드 성공 시)
+    elif component_value is not None and not st.session_state.get('report_saved_successfully', False):
         st.markdown("---")
         if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
             navigate(PAGE_HOME)
@@ -777,5 +779,6 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+
 
 
