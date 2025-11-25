@@ -140,7 +140,7 @@ def get_base64_decoder_html():
     # Base64 데이터를 플레이스홀더에 직접 삽입
     final_html = decoder_template.replace(BASE64_PLACEHOLDER, encoded_content)
     
-    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
+    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 완전 회피
     return final_html.replace('{', '{{').replace('}', '}}')
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
@@ -710,7 +710,7 @@ def render_login_page():
         login_html_content,
         height=600, 
         scrolling=True, 
-        key="login_component" # 복구된 key 인수 유지
+        # key 인수를 제거합니다.
     )
 
     if component_value and isinstance(component_value, dict) and component_value.get('type') == 'LOGIN':
@@ -743,7 +743,7 @@ def render_home_page():
         current_content, 
         height=1200, 
         scrolling=True,
-        key="home_filter_component" # 복구된 key 인수 유지
+        # key 인수를 제거합니다.
     )
 
     # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신, 로그아웃, 페이지 이동)
@@ -809,7 +809,7 @@ def render_admin_add_program_page():
         admin_html_content, 
         height=1000, 
         scrolling=True,
-        key="admin_add_program_component" # 복구된 key 인수 유지
+        # key 인수를 제거합니다.
     )
     
     # HTML 컴포넌트의 메시지 처리 (페이지 이동)
