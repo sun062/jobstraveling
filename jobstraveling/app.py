@@ -582,12 +582,31 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다.
+    (TypeError 방지를 위해 HTML 로드 여부 검사 로직이 추가되었습니다.)
     """
     st.title("잡스리포트 기록하기 📝")
     
     # 1. HTML 컴포넌트 렌더링 (폼 입력 및 제출 버튼 담당)
     add_report_html = read_html_file('add_report.html')
     
+    component_value = None
+    
+    # --------------------------------------------------------------------------
+    # ✨ 수정된 부분: add_report_html이 유효한 문자열인지 확인합니다.
+    # 만약 read_html_file 함수가 None을 반환하면, components.html 호출을 건너뜁니다.
+    # --------------------------------------------------------------------------
+    if not isinstance(add_report_html, str) or not add_report_html.strip():
+        st.error("⚠️ 오류 발생: 리포트 입력 양식 HTML 파일 ('add_report.html')을 불러올 수 없습니다.")
+        st.warning("**원인 분석:** `read_html_file` 함수가 파일을 찾지 못했거나, 파일 내용이 비어있을 수 있습니다. 파일 경로를 다시 한번 확인해 주세요.")
+        
+        st.markdown("---")
+        if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
+            # navigate, PAGE_HOME 등의 변수는 외부에서 정의되었다고 가정합니다.
+            navigate(PAGE_HOME)
+        return
+    # --------------------------------------------------------------------------
+    
+    # HTML이 유효한 문자열일 경우에만 component.html을 호출합니다. (TypeError 방지)
     component_value = components.html(
         html=add_report_html, 
         height=700, # 버튼이 포함되었으므로 높이 증가
@@ -617,6 +636,7 @@ def render_add_report_page():
         # NOTE: 페이지 이동 전에 False로 초기화하여 다음 렌더링 시 메시지가 다시 뜨지 않게 합니다.
         st.session_state.report_saved_successfully = False 
         
+        # PAGE_VIEW_REPORTS 변수는 외부에서 정의되었다고 가정합니다.
         col_view, col_home = st.columns(2)
         with col_view:
             if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
@@ -638,6 +658,7 @@ def render_add_report_page():
         if is_valid:
             
             # 저장 로직 실행
+            # save_report_to_firestore 함수는 외부에서 정의되었다고 가정합니다.
             success, message = save_report_to_firestore(current_data)
             
             if success:
@@ -653,11 +674,13 @@ def render_add_report_page():
 
     # C) 기본 상태 (제출 신호가 없을 때)
     # 이 영역에는 별도의 Streamlit 버튼을 배치하지 않습니다.
-
-    st.markdown("---")
-    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
-        navigate(PAGE_HOME)
-
+    # 성공 후 상태(A)나 제출 신호 수신 상태(B)가 아닐 경우에만 아래 버튼을 표시합니다.
+    
+    else:
+        st.markdown("---")
+        if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
+            navigate(PAGE_HOME)
+            
 def render_view_reports_page():
     """
     사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다.
@@ -757,3 +780,4 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+
