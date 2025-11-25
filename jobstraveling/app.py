@@ -1,843 +1,759 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import os
 import json
-import base64
+from datetime import date, datetime
+import time # 지연 처리를 위해 time 모듈 추가
 
-# --- 0. Mock 데이터 및 상수 정의 ---
-MOCK_PROGRAMS = [
-    {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
-]
+# --- Firebase SDK Admin (Python) 사용을 위한 Stubs ---
+# Python에서 Firestore에 접근하기 위해 가상의 함수를 정의합니다.
+# 실제 Firebase Admin SDK를 가져올 수 없으므로, on-premise 환경에서는
+# 이 부분이 실제 데이터베이스 접근 로직으로 대체됩니다.
+# 이 환경에서는 Streamlit이 백엔드 역할을 하므로, `st.session_state`에
+# 임시 데이터베이스 스텁을 만들어 사용하겠습니다.
+if 'firestore_reports' not in st.session_state:
+    st.session_state.firestore_reports = {} # {userId: [report1, report2, ...]}
+if 'firestore_programs' not in st.session_state:
+    # 프로그램 목록 초기 데이터 (Mock Program Data)
+    st.session_state.firestore_programs = [
+        {'id': '1', 'name': 'AI 개발자 체험 프로그램', 'field': 'IT/소프트웨어', 'description': '인공지능 모델을 직접 설계하고 코딩하는 경험', 'date': '2024-11-20', 'location': '온라인'},
+        {'id': '2', 'name': '친환경 건축가 워크숍', 'field': '건설/환경', 'description': '지속 가능한 건축 설계 및 재료 탐구', 'date': '2024-12-05', 'location': '서울 건축센터'},
+        {'id': '3', 'name': '우주 과학자 진로 특강', 'field': '과학/연구', 'description': 'NASA 탐사선 데이터 분석 및 우주 관측', 'date': '2025-01-10', 'location': '대학 강당'},
+    ]
 
-REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
-FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", "교육/보건", "금융/경제", "기계/제조", "운송/물류", "사회/인문", "과학/기술"]
 
-# Base64 데이터를 삽입할 고유 플레이스홀더
-BASE64_PLACEHOLDER = "__BASE64_DATA_TO_INSERT__"
-SCRIPT_PLACEHOLDER = "__STREAMLIT_SCRIPT_TO_INSERT__"
-PAGE_SCRIPT_PLACEHOLDER = "__PAGE_DATA_SCRIPT__"
+# --- Global Environment Variables ---
+# Canvas 환경 변수 로드 (Firestore 사용을 위한 필수 변수)
+firebaseConfig = json.loads(os.environ.get('__firebase_config', '{}'))
+appId = os.environ.get('__app_id', 'default-app-id')
+initialAuthToken = os.environ.get('__initial_auth_token', '')
 
+# --- 1. 환경 설정 및 세션 상태 초기화 ---
+st.set_page_config(layout="centered", initial_sidebar_state="expanded")
 
-# --- 1. 로그인 페이지 HTML 콘텐츠 (Base64 인코딩 대상) ---
-def get_login_html_base64():
+# 페이지 정의 상수
+PAGE_LOGIN = 'login'
+PAGE_SIGNUP = 'signup'
+PAGE_HOME = 'home'
+PAGE_PROGRAM_LIST = 'program_list'
+PAGE_ADD_PROGRAM = 'add_program'
+PAGE_ADD_REPORT = 'add_report'      # 잡스리포트 기록 페이지
+PAGE_VIEW_REPORTS = 'view_reports' # 잡스리포트 목록/상세 보기 페이지
+
+# 세션 상태 초기화
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = PAGE_LOGIN
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None # 로그인한 사용자 정보
+if 'is_auth_ready' not in st.session_state:
+    st.session_state.is_auth_ready = False
+if 'mock_user' not in st.session_state:
+    # 기본 Mock 사용자 정보 설정 (관리자 계정)
+    st.session_state.mock_user = {
+        'email': 'admin@jobtrekking.com', 
+        'password': 'adminpassword',
+        'schoolName': '관리자 학교',
+        'classNumber': '999',
+        'studentName': '관리자',
+        'birthDate': '2000-01-01',
+        'isAdmin': True 
+    }
+# 일반 사용자 Mock 계정 
+if 'mock_user_normal' not in st.session_state:
+    st.session_state.mock_user_normal = {
+        'email': 'user@jobtrekking.com', 
+        'password': 'userpassword',
+        'schoolName': '일반 고등학교',
+        'classNumber': '101',
+        'studentName': '일반사용자',
+        'birthDate': '2007-01-01',
+        'isAdmin': False
+    }
+
+# 리포트 폼 데이터를 저장할 세션 상태 (HTML 컴포넌트에서 전달받음)
+if 'current_report_data' not in st.session_state:
+    st.session_state.current_report_data = None
+if 'report_saved_successfully' not in st.session_state:
+    st.session_state.report_saved_successfully = False
+
+# --- Firebase Stubs (Python Backend) ---
+
+def get_current_user_id():
+    """Mock User ID 반환. 실제 환경에서는 __initial_auth_token을 파싱해야 합니다."""
+    # 간단히 Mock 사용자 이메일을 ID로 사용합니다.
+    return st.session_state.user_data.get('email') if st.session_state.user_data else None
+
+def save_report_to_firestore(report_data):
     """
-    로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
-    관리자 로그인 버튼을 추가했습니다.
+    Python 백엔드에서 리포트 데이터를 저장합니다.
+    실제 Firestore SDK 없이 세션 상태를 임시 저장소로 사용합니다.
     """
-    # 템플릿 콘텐츠 (Raw String)
-    html_content = r"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>로그인</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: #f0f4f8; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .login-card {
-            background-color: white;
-            padding: 2.5rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <div id="login-container" class="login-card">
-        <h1 class="text-4xl font-extrabold text-blue-600 mb-2">🗺️ Job-Trekking</h1>
-        <p class="text-gray-500 mb-8">청소년을 위한 진로 체험 프로그램 검색 서비스</p>
-        
-        <div class="space-y-4 mb-6">
-            <input type="text" placeholder="아이디 (선택 사항)" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <input type="password" placeholder="비밀번호 (선택 사항)" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-        </div>
-        
-        <button onclick="simulateLogin(false)" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
-            일반 사용자 로그인 / 시작하기
-        </button>
+    user_id = get_current_user_id()
+    if not user_id:
+        return False, "사용자 인증 정보를 찾을 수 없습니다."
 
-        <button onclick="simulateLogin(true)" class="w-full py-3 mt-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
-            🔒 관리자 로그인 (데모)
-        </button>
-
-        <p class="text-sm text-gray-400 mt-6">데모 버전: 실제 아이디/비밀번호는 필요하지 않습니다.</p>
-    </div>
-
-    <script>
-        function simulateLogin(isAdmin) {
-            // Streamlit Python 백엔드에 로그인 메시지를 보내 인증 상태를 변경하도록 요청
-            parent.postMessage({ type: 'LOGIN', isAdmin: isAdmin }, '*');
-        }
-    </script>
-</body>
-</html>
-    """
-    # Base64 인코딩
-    encoded_html = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
-    return encoded_html
-
-# --- 2. Base64 디코더 HTML 콘텐츠 (로그인 페이지 로드 스크립트) ---
-def get_base64_decoder_html():
-    """
-    Base64 인코딩된 HTML을 디코딩하여 현재 Streamlit 컴포넌트에 삽입하는
-    HTML 스크립트를 반환합니다. (Python 포맷팅 충돌 완전 회피)
-    """
-    encoded_content = get_login_html_base64()
+    # 필수 필드 유효성 검사 (Streamlit 버튼에서 이미 체크하지만, 백엔드에서도 최종 확인)
+    if not report_data or not report_data.get('programName') or not report_data.get('experienceDate') or report_data.get('rating') is None or not report_data.get('reportContent'):
+        return False, "체험 프로그램명, 일자, 별점, 소감 내용을 모두 입력해 주세요."
     
-    # 디코더 템플릿
-    decoder_template = r"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>Decoder</title>
-</head>
-<body>
-    <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
-    <script>
-        const encoded = '__BASE64_DATA_TO_INSERT__'; 
-        
-        function decodeBase64(base64) {
-            const binary_string = window.atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            return new TextDecoder().decode(bytes);
-        }
-
-        try {
-            const decodedHtml = decodeBase64(encoded);
-            document.open();
-            document.write(decodedHtml);
-            document.close();
-        } catch(e) {
-            const msgEl = document.getElementById('loading-message');
-            if (msgEl) {
-                msgEl.style.color = 'red';
-                msgEl.textContent = '페이지 로딩 오류. 콘솔을 확인해주세요.';
-            }
-            console.error("Base64 decoding failed:", e);
-        }
-    </script>
-</body>
-</html>
-"""
+    # Firestore Data Structure Stub
+    if user_id not in st.session_state.firestore_reports:
+        st.session_state.firestore_reports[user_id] = []
     
-    # Base64 데이터를 플레이스홀더에 직접 삽입
-    final_html = decoder_template.replace(BASE64_PLACEHOLDER, encoded_content)
+    # 날짜 문자열을 Date 객체로 변환하여 저장
     
-    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 완전 회피
-    return final_html.replace('{', '{{').replace('}', '}}')
-
-# --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
-def get_base_home_html_content(is_admin):
-    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. """
+    report_data['id'] = str(len(st.session_state.firestore_reports[user_id]) + 1) # 임시 ID 부여
+    report_data['createdAt'] = datetime.now().isoformat()
     
-    # 관리자 링크 HTML 조각
-    admin_link = ""
-    if is_admin:
-        admin_link = """
-        <button onclick="navigate('admin_add')" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
-            관리자 페이지
-        </button>
-        """
+    st.session_state.firestore_reports[user_id].append(report_data)
+    
+    return True, ""
 
-    # Home Page HTML 템플릿 (Raw String)
-    html = f"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>잡스트레블링 - 홈</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* (기존 CSS 스타일 유지) */
-        body {{ 
-            font-family: 'Inter', sans-serif; 
-            background-color: #f0f4f8; 
-            min-height: 100vh; 
-            margin: 0;
-            padding: 0;
-        }}
-        .header-bg {{
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        }}
-        .program-card {{
-            transition: transform 0.2s, box-shadow 0.2s;
-        }}
-        .program-card:hover {{
-            transform: translateY(-4px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }}
-        .tag-active {{
-            background-color: #2563eb; /* Blue 700 */
-            color: white;
-            border-color: #2563eb;
-        }}
-        .tag-inactive {{
-            background-color: #e0f2f7; /* Light Cyan */
-            color: #0c4a6e; /* Cyan 900 */
-            border-color: #bae6fd; /* Cyan 200 */
-        }}
-    </style>
-</head>
-<body class="p-0">
 
-    <!-- 1. 상단 헤더 및 검색 바 -->
-    <header class="header-bg p-4 shadow-lg sticky top-0 z-10">
-        <div class="max-w-4xl mx-auto flex justify-between items-center text-white">
-            <h1 class="text-2xl font-bold">🗺️ Job-Trekking 홈</h1>
-            <div class="flex space-x-3">
-                {admin_link}
-                <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
-                    로그아웃
-                </button>
+# --- 2. HTML 파일 로드 함수 ---
+def read_html_file(file_name):
+    """HTML 파일을 읽어 문자열로 반환합니다. (htmls 폴더 내에서 파일을 찾습니다)"""
+    # ⭐️ 경로 문제 해결을 위해 현재 스크립트의 절대 경로를 기준으로 파일을 찾습니다.
+    # __file__은 현재 실행 중인 파일(app.py)의 경로를 나타냅니다.
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, 'htmls', file_name)
+    
+    try:
+        # 파일을 직접 읽는 대신, 파일이 없다고 가정하고 mock HTML을 반환합니다. 
+        # 이는 Canvas 환경의 제약사항을 우회하기 위함입니다.
+        if file_name == 'home.html':
+            return """
+            <style>
+                .card {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 20px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    margin-bottom: 20px;
+                }
+                .section-title {
+                    font-size: 1.5rem;
+                    color: #1e40af;
+                    border-bottom: 2px solid #bfdbfe;
+                    padding-bottom: 5px;
+                    margin-bottom: 15px;
+                }
+            </style>
+            <div class="card">
+                <h2 class="section-title">👤 사용자 정보</h2>
+                <p><strong>이름:</strong> {{USER_NAME}}</p>
+                <p><strong>학교:</strong> {{USER_SCHOOL}}</p>
+                <p><strong>반 번호:</strong> {{USER_CLASS}}</p>
+                <p><strong>권한:</strong> {{USER_IS_ADMIN}}</p>
             </div>
-        </div>
-        
-        <!-- 선택형 검색 입력 영역 (생략) -->
-        <div class="max-w-4xl mx-auto mt-4 grid grid-cols-2 gap-3">
-            <!-- 기존의 지역/분야 선택 박스 내용... -->
-            <div id="regionSelectBox" onclick="showRegionModal()" 
-                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
-                <span id="selectedRegionText" class="truncate font-medium text-gray-600">지역 선택 (필수)</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+            <div class="card">
+                <h2 class="section-title">📊 나의 활동 요약</h2>
+                <p>총 기록된 리포트 수: <span id="reportCount">0</span>개</p>
+                <p>가장 최근 기록일: <span id="lastReportDate">없음</span></p>
             </div>
-            <div id="fieldSelectBox" onclick="showFieldModal()" 
-                 class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
-                <span id="selectedFieldText" class="truncate font-medium text-gray-600">분야 선택 (다중 선택 가능)</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+            <div class="card">
+                <h2 class="section-title">🎯 이번 주 추천 진로 분야</h2>
+                <ul style="list-style-type: none; padding: 0;">
+                    <li style="padding: 5px 0; border-bottom: 1px dashed #eee;">⭐ AI와 데이터 사이언스</li>
+                    <li style="padding: 5px 0; border-bottom: 1px dashed #eee;">⭐ 친환경 에너지 기술</li>
+                    <li style="padding: 5px 0;">⭐ 미디어 콘텐츠 기획</li>
+                </ul>
             </div>
-        </div>
-
-        <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
-             <div id="currentFilters" class="text-sm text-white font-light">
-                 <!-- 필터 내용... -->
-             </div>
-             <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition text-white">
-                 초기화
-             </button>
-        </div>
-    </header>
-
-    <!-- 2. 프로그램 목록 -->
-    <main class="max-w-4xl mx-auto p-4 sm:p-8">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">⭐ 프로그램 검색 결과</h2>
-        
-        <div id="programList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- 프로그램 카드가 JS에 의해 여기에 삽입됩니다. -->
-        </div>
-    </main>
-
-    <!-- 3. Footer / Modals (생략) -->
-    <footer class="text-center text-gray-500 text-sm py-6 border-t mt-10">
-        © 2024 Job-Trekking | 모든 프로그램 정보는 주관사에 귀속됩니다.
-    </footer>
-    
-    <!-- 메시지 박스, 지역/분야 모달은 생략하고 JS로만 처리 -->
-
-    <script type="module">
-        import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import {{ getAuth, signInAnonymously, signInWithCustomToken }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {{ getFirestore, setLogLevel }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        let db;
-        let auth;
-        let userId; 
-        let appId;
-        let isFirebaseReady = false; 
-        
-        let Programs = []; 
-        let Regions = []; 
-        let Fields = []; 
-
-        let currentRegion = ""; 
-        let currentFields = []; 
-        
-        // --- Firebase 초기화 함수 ---
-        async function initializeFirebase() {{
-            try {{
-                // (Firebase 초기화 및 인증 로직은 그대로 유지)
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{{}}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('Debug');
-                
-                if (initialAuthToken) {{
-                    await signInWithCustomToken(auth, initialAuthToken);
-                }} else {{
-                    await signInAnonymously(auth);
-                }}
-                
-                userId = auth.currentUser?.uid || crypto.randomUUID();
-                isFirebaseReady = true; 
-                console.log("Firebase initialized successfully. User ID:", userId);
-                
-                if (typeof onPageLoad === 'function') {{
-                    onPageLoad(); 
-                }}
-
-            }} catch (error) {{
-                console.error("Firebase initialization or sign-in failed:", error);
-                // showMessage("Firebase 초기화 중 오류가 발생했습니다.");
-            }}
-        }}
-
-        // --- Navigation Function ---
-        window.navigate = function(page) {{
-            parent.postMessage({{ type: 'NAVIGATE', page: page }}, '*');
-        }};
-
-        // --- Streamlit Back-end Communication ---
-        function requestInitialData() {{
-            parent.postMessage({{ type: 'GET_INITIAL_DATA' }}, '*');
-        }}
-
-        window.requestStreamlitLogout = function() {{
-            // showMessage('로그아웃 하시겠습니까?', () => {{
-                 parent.postMessage({{type: 'LOGOUT'}}, '*');
-            // }});
-        }}
-
-        window.addEventListener('message', (event) => {{
-            if (event.source !== window.parent) return;
-
-            const data = event.data;
-            if (typeof data !== 'object' || data === null) return;
-
-            switch (data.type) {{
-                case 'PROGRAM_DATA':
-                    Programs = data.programs || [];
-                    Regions = data.regions || [];
-                    Fields = data.fields || [];
-                    
-                    // createRegionOptions(); // 모달 생략
-                    // createFieldOptions(); // 모달 생략
-                    filterPrograms();
-                    break;
-                case 'ERROR_MESSAGE':
-                    // showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
-                    console.error("Streamlit Error:", data.message);
-                    break;
-                default:
-                    break;
-            }}
-        }});
-        
-        window.onload = initializeFirebase;
-        
-        // --- Program Filtering and Rendering (간소화) ---
-        
-        function createProgramCard(program) {{
-            const card = document.createElement('a');
-            card.href = program.url; 
-            card.target = "_blank"; 
-            card.className = "program-card bg-white rounded-xl shadow-lg overflow-hidden cursor-pointer block border border-gray-100 hover:border-blue-300";
+            """
+        elif file_name == 'program_list.html':
+            return """
+            <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+            <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+            <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
             
-            const typeColor = program.type === '진로' ? 'bg-indigo-100 text-indigo-700' : 'bg-green-100 text-green-700';
-
-            const fieldTags = (program.fields || []).map(field => 
-                `<span class="text-xs font-light px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">${{field}}</span>`
-            ).join('');
-
-            card.innerHTML = `
-                <img src="${{program.img}}" onerror="this.onerror=null; this.src='https://placehold.co/400x200/cbd5e1/475569?text=Image+Not+Found';" alt="${{program.title}}" class="w-full h-40 object-cover">
-                <div class="p-4 space-y-2">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${{typeColor}}">${{program.type}}</span>
-                        ${{fieldTags}}
-                    </div>
-                    <h3 class="text-lg font-bold text-gray-800 truncate">${{program.title}}</h3>
-                    <p class="text-sm text-gray-500">${{program.description}}</p>
-                    <p class="text-xs text-gray-400 font-medium flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        ${{program.region}}
-                    </p>
-                </div>
-            `;
-
-            return card;
-        }}
-
-        function renderPrograms(programs) {{
-            const container = document.getElementById('programList');
-            if (!container) return;
-
-            container.innerHTML = '';
-            
-            if (programs.length === 0) {{
-                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다.</p>';
-                return;
-            }}
-
-            programs.forEach(program => {{
-                container.appendChild(createProgramCard(program));
-            }});
-        }}
-        
-        window.filterPrograms = function() {{
-            // 필터링 로직 생략하고 전체 프로그램 렌더링
-            renderPrograms(Programs);
-            updateFilterDisplay();
-        }}
-
-        function updateFilterDisplay() {{
-            document.getElementById('selectedRegionText').textContent = "전체 지역 (데모)";
-            document.getElementById('selectedFieldText').textContent = "전체 분야 (데모)";
-            document.getElementById('currentFilters').innerHTML = `
-                현재 필터: <span class="font-bold">전체</span>
-            `;
-        }}
-
-        window.resetFilters = function() {{
-            // showMessage('검색 조건이 초기화되었습니다.');
-            filterPrograms();
-        }}
-
-        window.onPageLoad = function() {{
-            requestInitialData();
-            updateFilterDisplay();
-        }}
-        
-        // 모달 함수들은 데모를 위해 비워둡니다.
-        window.showRegionModal = function() {{}};
-        window.hideRegionModal = function() {{}};
-        window.showFieldModal = function() {{}};
-        window.applyFieldSelection = function() {{}};
-
-        updateFilterDisplay();
-
-    </script>
-    {PAGE_SCRIPT_PLACEHOLDER}
-</body>
-</html>
-"""
-    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
-    return html.replace('{', '{{').replace('}', '}}')
-
-# --- 4. HTML 콘텐츠 (관리자 프로그램 추가 폼) ---
-def get_admin_add_program_html_content():
-    """관리자 페이지: 프로그램 추가 폼 HTML 콘텐츠를 반환합니다."""
-
-    # Admin Add Program HTML 템플릿 (Raw String)
-    html = f"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>프로그램 추가</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {{ 
-            font-family: 'Inter', sans-serif; 
-            background-color: #f0f4f8; 
-            min-height: 100vh; 
-            margin: 0;
-            padding: 0;
-        }}
-    </style>
-</head>
-<body class="p-4 sm:p-8">
-    <div class="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-blue-100">
-        
-        <header class="mb-8 border-b pb-4 flex justify-between items-center">
-            <h1 class="text-3xl font-extrabold text-blue-700">🔒 새 진로 프로그램 추가</h1>
-            <button onclick="navigate('home')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-medium">
-                홈으로 돌아가기
-            </button>
-        </header>
-
-        <form id="programForm" onsubmit="event.preventDefault(); submitProgram();" class="space-y-6">
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- 1. 프로그램 제목 -->
-                <div>
-                    <label for="title" class="block text-sm font-medium text-gray-700 mb-1">프로그램 제목 <span class="text-red-500">*</span></label>
-                    <input type="text" id="title" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                </div>
-
-                <!-- 2. 프로그램 구분 -->
-                <div>
-                    <label for="type" class="block text-sm font-medium text-gray-700 mb-1">구분 <span class="text-red-500">*</span></label>
-                    <select id="type" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        <option value="진로">진로 체험</option>
-                        <option value="견학">현장 견학</option>
-                        <option value="특강">온라인 특강</option>
-                    </select>
+            <div id="program-list-app" style="font-family: Arial, sans-serif;">
+                <h2 style="color: #1e40af;">등록된 프로그램 목록 (Mock Data)</h2>
+                <p style="color: #6b7280;">현재 Streamlit 세션에 저장된 Mock 프로그램 목록을 표시합니다. (실제 Firestore 연동 아님)</p>
+                <div id="program-container">
+                    <ul style="list-style-type: none; padding: 0;" id="program-list">
+                        <!-- 프로그램 목록이 여기에 로드됩니다 -->
+                        <li style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; background-color: #f9f9f9;">
+                            <strong style="color: #333;">AI 개발자 체험 프로그램</strong> (IT/소프트웨어) - 2024-11-20
+                        </li>
+                        <li style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; background-color: #f9f9f9;">
+                            <strong style="color: #333;">친환경 건축가 워크숍</strong> (건설/환경) - 2024-12-05
+                        </li>
+                        <li style="padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; background-color: #f9f9f9;">
+                            <strong style="color: #333;">우주 과학자 진로 특강</strong> (과학/연구) - 2025-01-10
+                        </li>
+                    </ul>
                 </div>
             </div>
-
-            <!-- 3. 프로그램 상세 설명 -->
-            <div>
-                <label for="description" class="block text-sm font-medium text-gray-700 mb-1">상세 설명 <span class="text-red-500">*</span></label>
-                <textarea id="description" rows="3" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"></textarea>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- 4. 프로그램 지역 -->
-                <div>
-                    <label for="region" class="block text-sm font-medium text-gray-700 mb-1">지역 <span class="text-red-500">*</span></label>
-                    <select id="region" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                        <!-- 지역 옵션은 JS로 채워집니다 -->
-                    </select>
-                </div>
-
-                <!-- 5. 외부 URL -->
-                <div>
-                    <label for="url" class="block text-sm font-medium text-gray-700 mb-1">외부 신청 URL</label>
-                    <input type="url" id="url" placeholder="https://..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                </div>
-            </div>
-
-            <!-- 6. 대표 이미지 URL -->
-            <div>
-                <label for="img" class="block text-sm font-medium text-gray-700 mb-1">대표 이미지 URL</label>
-                <input type="url" id="img" placeholder="https://placehold.co/400x200" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                <p class="mt-1 text-xs text-gray-500">프로그램 카드에 표시될 이미지입니다.</p>
-            </div>
-
-            <!-- 7. 분야 태그 (다중 선택) -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">관련 분야 (다중 선택 가능) <span class="text-red-500">*</span></label>
-                <div id="fieldTagsContainer" class="flex flex-wrap gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
-                    <!-- 분야 태그 버튼들이 여기에 JS로 삽입됩니다. -->
-                </div>
-            </div>
-
-            <div id="messageDisplay" class="p-3 text-sm rounded-lg text-center font-medium hidden"></div>
-
-            <button type="submit" class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
-                🚀 프로그램 등록하기
-            </button>
-        </form>
-    </div>
-    
-    <script type="module">
-        import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import {{ getAuth, signInAnonymously, signInWithCustomToken }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {{ getFirestore, setLogLevel, collection, addDoc }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // --- Global Variables ---
-        let db;
-        let auth;
-        let userId; 
-        let appId;
-        let isFirebaseReady = false; 
-        
-        let Regions = {regions_json};
-        let Fields = {fields_json};
-
-        let selectedFields = [];
-        
-        // --- Firebase Initialization ---
-        async function initializeFirebase() {{
-            try {{
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{{}}');
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            """
+        elif file_name == 'add_program.html':
+            return """
+            <h2 style="color: #ef4444;">새 프로그램 추가 기능 (Mock)</h2>
+            <p>관리자님, 프로그램을 추가하는 기능은 현재 Python 백엔드의 Mock 리스트에만 임시로 저장됩니다.</p>
+            <form id="addProgramForm">
+                <label for="programName">프로그램명:</label><br>
+                <input type="text" id="programName" name="programName" style="width: 90%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;" required><br>
                 
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('Debug');
-                
-                if (initialAuthToken) {{
-                    await signInWithCustomToken(auth, initialAuthToken);
-                }} else {{
-                    await signInAnonymously(auth);
-                }}
-                
-                userId = auth.currentUser?.uid || crypto.randomUUID();
-                isFirebaseReady = true; 
-                
-                setupFormOptions();
+                <label for="jobField">관련 분야:</label><br>
+                <input type="text" id="jobField" name="jobField" value="IT/소프트웨어" style="width: 90%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;" required><br>
 
-            }} catch (error) {{
-                console.error("Firebase initialization failed:", error);
-                showMessage("Firebase 초기화 중 오류가 발생했습니다.", 'error');
-            }}
-        }}
-
-        // --- Utility Functions ---
-        window.navigate = function(page) {{
-            parent.postMessage({{ type: 'NAVIGATE', page: page }}, '*');
-        }};
-        
-        function showMessage(text, type = 'info') {{
-            const display = document.getElementById('messageDisplay');
-            if (!display) return;
-
-            display.textContent = text;
-            display.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
-            
-            if (type === 'error') {{
-                display.classList.add('bg-red-100', 'text-red-700');
-            }} else if (type === 'success') {{
-                display.classList.add('bg-green-100', 'text-green-700');
-            }} else {{
-                display.classList.add('bg-gray-100', 'text-gray-700');
-            }}
-        }}
-
-        // --- Form Setup Functions ---
-        function setupFormOptions() {{
-            // 지역 옵션 설정
-            const regionSelect = document.getElementById('region');
-            Regions.filter(r => r !== '전국').forEach(region => {{ // '전국'은 등록 시 제외
-                const option = document.createElement('option');
-                option.value = region;
-                option.textContent = region;
-                regionSelect.appendChild(option);
-            }});
-            
-            // 분야 태그 설정
-            const tagsContainer = document.getElementById('fieldTagsContainer');
-            Fields.forEach(field => {{
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.textContent = field;
-                button.className = 'px-3 py-1 rounded-full border text-sm font-medium transition tag-inactive';
-                button.setAttribute('data-field', field);
-                button.onclick = () => toggleField(field, button);
-                tagsContainer.appendChild(button);
-            }});
-        }}
-
-        function toggleField(field, button) {{
-            const index = selectedFields.indexOf(field);
-            const activeClass = 'bg-blue-600 text-white border-blue-600 tag-active';
-            const inactiveClass = 'bg-white text-gray-700 border-gray-300 tag-inactive';
-
-            if (index > -1) {{
-                selectedFields.splice(index, 1);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{inactiveClass}}`;
-            }} else {{
-                selectedFields.push(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{activeClass}}`;
-            }}
-        }}
-
-        // --- Submission Logic ---
-        window.submitProgram = async function() {{
-            if (!isFirebaseReady) {{
-                showMessage("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.", 'error');
-                return;
-            }}
-            if (selectedFields.length === 0) {{
-                showMessage("프로그램 관련 분야를 최소 하나 이상 선택해야 합니다.", 'error');
-                return;
-            }}
-
-            const programData = {{
-                title: document.getElementById('title').value.trim(),
-                type: document.getElementById('type').value,
-                description: document.getElementById('description').value.trim(),
-                region: document.getElementById('region').value,
-                url: document.getElementById('url').value.trim() || null,
-                img: document.getElementById('img').value.trim() || 'https://placehold.co/400x200/cbd5e1/475569?text=Placeholder',
-                fields: selectedFields,
-                createdAt: new Date().toISOString(),
-                creatorId: userId,
-            }};
-            
-            try {{
-                // Firestore에 데이터 추가: /artifacts/{{appId}}/public/data/programs
-                const publicDataPath = `/artifacts/${{appId}}/public/data/programs`;
-                const programsCollection = collection(db, publicDataPath);
-                
-                await addDoc(programsCollection, programData);
-                
-                showMessage("✅ 새 프로그램이 성공적으로 등록되었습니다!", 'success');
-                document.getElementById('programForm').reset();
-                selectedFields = [];
-                setupFormOptions(); // 폼 초기화 후 태그 상태도 초기화
-                
-            }} catch (e) {{
-                console.error("Firestore submission failed:", e);
-                showMessage("프로그램 등록 중 오류가 발생했습니다: " + e.message, 'error');
-            }}
-        }}
-
-        window.onload = initializeFirebase;
-    </script>
-</body>
-</html>
-"""
-    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
-    # 단, JSON 데이터는 이스케이프하지 않도록 주의합니다.
-    json_regions = json.dumps(REGIONS)
-    json_fields = json.dumps(FIELDS)
-    
-    # 템플릿의 JSON Placeholder를 실제 데이터로 채우고, 
-    # 나머지 HTML 콘텐츠는 이스케이프 처리하여 반환합니다.
-    final_html = html.replace('{regions_json}', json_regions) \
-                     .replace('{fields_json}', json_fields)
-    
-    return final_html.replace('{', '{{').replace('}', '}}')
-
-
-
-# --- 5. Streamlit 페이지 렌더링 함수 (Login) ---
-def render_login_page():
-    
-    login_html_content = get_base64_decoder_html()
-
-    component_value = components.html(
-        login_html_content,
-        height=600, 
-        scrolling=True, 
-        # key 인수를 제거합니다.
-    )
-
-    if component_value and isinstance(component_value, dict) and component_value.get('type') == 'LOGIN':
-        st.session_state['user_authenticated'] = True
-        st.session_state['is_admin'] = component_value.get('isAdmin', False)
-        st.session_state['current_page'] = 'home'
-        st.rerun()
-
-# --- 6. Streamlit 페이지 렌더링 함수 (Home) ---
-def render_home_page():
-    
-    is_admin = st.session_state.get('is_admin', False)
-
-    # 1. BASE HTML 초기화 및 관리자 여부에 따른 템플릿 재생성
-    # 관리자 여부에 따라 Home 페이지 템플릿이 달라지므로, 항상 다시 생성합니다.
-    base_html_template_unsafe = get_base_home_html_content(is_admin)
-    
-    # 2. current_html 초기화 및 유효성 검사
-    current_content = st.session_state.get('current_home_html')
-    
-    # 데이터 요청을 위한 초기 HTML 생성
-    if not isinstance(current_content, str) or not current_content:
-        # 이스케이프된 템플릿에 빈 스크립트를 삽입
-        initial_html = base_html_template_unsafe.replace(PAGE_SCRIPT_PLACEHOLDER.replace('{', '{{').replace('}', '}}'), "")
-        st.session_state['current_home_html'] = initial_html
-        current_content = initial_html
-
-    # 3. HTML 컴포넌트 렌더링
-    component_value = components.html(
-        current_content, 
-        height=1200, 
-        scrolling=True,
-        # key 인수를 제거합니다.
-    )
-
-    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신, 로그아웃, 페이지 이동)
-    if component_value and isinstance(component_value, dict):
-        message = component_value
-
-        if message.get('type') == 'GET_INITIAL_DATA':
-            
-            # HTML로 보낼 데이터 구조
-            data_to_send = {
-                "type": "PROGRAM_DATA",
-                "programs": MOCK_PROGRAMS,
-                "regions": REGIONS,
-                "fields": FIELDS
-            }
-            
-            # 5. 데이터 전송을 위한 동적 스크립트 생성
-            data_json = json.dumps(data_to_send)
-            
-            # Streamlit에 메시지를 포스트하는 스크립트
-            streamlit_data_script = f"""
+                <button type="submit" style="background-color: #ef4444; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer;">프로그램 등록 (Mock)</button>
+            </form>
             <script>
-                const dataPayload = {data_json};
-                window.postMessage(dataPayload, '*'); 
+                document.getElementById('addProgramForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    alert('프로그램이 Mock 리스트에 추가되었습니다! (실제 Firestore 저장 아님)');
+                    // Streamlit과의 통신 없이 단순 알림
+                });
             </script>
             """
-            # 스크립트 내부 중괄호 이스케이프
-            streamlit_data_script = streamlit_data_script.replace('{', '{{').replace('}', '}}')
+        elif file_name == 'add_report.html':
+            return """
+            <style>
+                #reportForm label { font-weight: bold; display: block; margin-top: 15px; color: #1e40af;}
+                #reportForm input[type="text"], #reportForm input[type="date"], #reportForm select, #reportForm textarea { 
+                    width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; 
+                }
+                #rating-stars { font-size: 2rem; cursor: pointer; user-select: none; }
+                .star { color: #ccc; transition: color 0.2s; }
+                .star.filled { color: #fbbf24; }
+                .report-button {
+                    background-color: #10b981; color: white; padding: 12px 20px; border: none; border-radius: 8px; 
+                    cursor: pointer; font-size: 1.1rem; margin-top: 30px; width: 100%; transition: background-color 0.3s;
+                }
+                .report-button:hover { background-color: #059669; }
+            </style>
+            <form id="reportForm">
+                <input type="hidden" id="ratingValue" name="rating" value="0">
+                
+                <label for="programName">체험 프로그램명 (필수)</label>
+                <input type="text" id="programName" name="programName" required>
 
-            # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
-            new_html = base_html_template_unsafe.replace(PAGE_SCRIPT_PLACEHOLDER.replace('{', '{{').replace('}', '}}'), streamlit_data_script)
-            
-            # 7. 세션 상태 업데이트 및 재실행 요청
-            st.session_state['current_home_html'] = new_html
-            st.rerun()
+                <label for="experienceDate">체험 일자 (필수)</label>
+                <input type="date" id="experienceDate" name="experienceDate" required>
+                
+                <label for="jobField">관련 진로 분야</label>
+                <input type="text" id="jobField" name="jobField" value="미입력">
 
-        elif message.get('type') == 'LOGOUT':
-            st.session_state['user_authenticated'] = False
-            st.session_state['current_page'] = 'login'
-            if 'current_home_html' in st.session_state:
-                del st.session_state['current_home_html']
-            st.rerun()
-            
-        elif message.get('type') == 'NAVIGATE':
-            st.session_state['current_page'] = message.get('page')
-            st.rerun()
+                <label>체험 만족도 (별점, 필수)</label>
+                <div id="rating-stars">
+                    <span class="star" data-rating="1">★</span>
+                    <span class="star" data-rating="2">★</span>
+                    <span class="star" data-rating="3">★</span>
+                    <span class="star" data-rating="4">★</span>
+                    <span class="star" data-rating="5">★</span>
+                </div>
 
-# --- 7. Streamlit 페이지 렌더링 함수 (Admin Add Program) ---
-def render_admin_add_program_page():
-    
-    # 관리자가 아니면 홈으로 돌려보냄
-    if not st.session_state.get('is_admin'):
-        st.session_state['current_page'] = 'home'
-        st.warning("관리자 권한이 없습니다.")
-        st.rerun()
+                <label for="reportContent">체험 소감 및 내용 (필수)</label>
+                <textarea id="reportContent" name="reportContent" rows="8" required></textarea>
+
+                <button type="submit" class="report-button">📝 잡스리포트 저장</button>
+            </form>
+
+            <script>
+                const stars = document.querySelectorAll('.star');
+                const ratingInput = document.getElementById('ratingValue');
+                
+                stars.forEach(star => {
+                    star.addEventListener('click', (e) => {
+                        const rating = parseInt(e.target.dataset.rating);
+                        ratingInput.value = rating;
+                        updateStars(rating);
+                    });
+                });
+
+                function updateStars(currentRating) {
+                    stars.forEach(star => {
+                        const starRating = parseInt(star.dataset.rating);
+                        if (starRating <= currentRating) {
+                            star.classList.add('filled');
+                        } else {
+                            star.classList.remove('filled');
+                        }
+                    });
+                }
+                
+                // 폼 제출 처리
+                document.getElementById('reportForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const form = e.target;
+                    const reportData = {};
+                    
+                    // 폼 데이터를 객체로 변환
+                    new FormData(form).forEach((value, key) => {
+                        // rating은 숫자로 변환
+                        if (key === 'rating') {
+                            reportData[key] = parseInt(value);
+                        } else {
+                            reportData[key] = value;
+                        }
+                    });
+                    
+                    // Streamlit으로 데이터와 제출 플래그를 전송
+                    Streamlit.setComponentValue({
+                        reportData: reportData,
+                        submitted: true
+                    });
+                });
+
+                // Streamlit 컴포넌트 라이브러리 로드
+                (function() {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/gh/streamlit/streamlit-component-lib@1.0.3/dist/streamlit-component-lib.js';
+                    script.onload = () => Streamlit.setComponentReady();
+                    document.head.appendChild(script);
+                })();
+
+                // 초기 별점 설정 (만약 이전 데이터가 있다면)
+                updateStars(parseInt(ratingInput.value));
+            </script>
+            """
+        else:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+    except FileNotFoundError:
+        st.error(f"⚠️ HTML 파일을 찾을 수 없습니다. 'htmls/{file_name}' 경로를 확인해 주세요.")
+        return ""
+    except Exception as e:
+        st.error(f"파일 읽기 중 예기치 않은 오류 발생: {e}")
+        return ""
+
+# --- 3. 페이지 전환 ---
+def navigate(page):
+    """세션 상태를 변경하여 페이지를 전환합니다."""
+    st.session_state.current_page = page
+    st.rerun()
+
+# --- Mock 로그인 헬퍼 함수 (추가) ---
+def perform_mock_login(user_to_login):
+    """지정된 Mock 사용자 데이터로 로그인 처리 후 페이지 이동"""
+    if not user_to_login:
+        st.error("사용자 정보를 찾을 수 없습니다. Mock 데이터 설정을 확인해 주세요.")
         return
-
-    st.title("관리자: 새 진로 프로그램 추가")
+        
+    user_data = {**user_to_login}
+    user_data.pop('password', None) # 민감 정보 제거
     
-    admin_html_content = get_admin_add_program_html_content()
+    st.session_state.user_data = user_data
+    
+    with st.spinner("로그인 중..."):
+        time.sleep(0.5) # 로그인 애니메이션 효과
+        
+    st.success(f"로그인 성공! {user_data['studentName']}님 환영합니다. 홈 화면으로 이동합니다.")
+    navigate(PAGE_HOME)
 
-    component_value = components.html(
-        admin_html_content, 
-        height=1000, 
-        scrolling=True,
-        # key 인수를 제거합니다.
+
+# --- 4. 페이지 렌더링 함수 ---
+
+def render_login_page():
+    """요청에 따라 두 개의 버튼을 사용하는 로그인 페이지를 렌더링합니다."""
+    
+    st.markdown(
+        """
+        <style>
+            /* 버튼 중앙 정렬 및 디자인 */
+            .stButton>button {
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+                font-size: 1.2rem;
+                padding: 15px 30px;
+                border-radius: 12px;
+                font-weight: bold;
+                transition: all 0.2s;
+            }
+            .stButton:first-child button {
+                background-color: #2563eb; /* Blue for Normal User */
+                color: white;
+            }
+            .stButton:nth-child(2) button {
+                background-color: #f59e0b; /* Amber for Admin */
+                color: white;
+            }
+            .stButton>button:hover {
+                filter: brightness(1.1);
+                transform: translateY(-2px);
+            }
+            .login-container {
+                max-width: 400px;
+                margin: 50px auto;
+                padding: 30px;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                background-color: #ffffff;
+            }
+        </style>
+        """, unsafe_allow_html=True
     )
     
-    # HTML 컴포넌트의 메시지 처리 (페이지 이동)
-    if component_value and isinstance(component_value, dict):
-        if component_value.get('type') == 'NAVIGATE':
-            st.session_state['current_page'] = component_value.get('page')
-            st.rerun()
+    # 중앙 정렬을 위한 컬럼 분할
+    col1, col2, col3 = st.columns([1, 4, 1])
+
+    with col2:
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown('<h2 style="text-align: center; color: #1e40af; margin-bottom: 30px;">🗺️ Job-Trekking 로그인 💼</h2>', unsafe_allow_html=True)
+        
+        # 1. 일반 사용자 로그인 버튼
+        if st.button("🚀 일반 사용자 로그인 / 시작하기", key="mock_login_normal", use_container_width=True):
+            perform_mock_login(st.session_state.mock_user_normal)
+            
+        st.markdown("<br>", unsafe_allow_html=True) # 공백 추가
+
+        # 2. 관리자 로그인 버튼
+        if st.button("⚙️ 관리자 로그인 (데모)", key="mock_login_admin", use_container_width=True):
+            perform_mock_login(st.session_state.mock_user)
+
+        st.markdown("---")
+        
+        # 3. 회원가입 버튼 (네이티브 기능 유지)
+        if st.button("회원가입", key="navigate_to_signup", use_container_width=True):
+            navigate(PAGE_SIGNUP)
+            
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
-# --- 8. 메인 실행 블록 ---
-if __name__ == '__main__':
-    st.set_page_config(layout="wide")
+def render_signup_page():
+    """회원가입 페이지를 Streamlit 네이티브 폼으로 렌더링합니다."""
+    st.title("회원가입")
 
-    # 인증 및 페이지 상태 설정
-    if 'user_authenticated' not in st.session_state:
-        st.session_state['user_authenticated'] = False 
-        st.session_state['is_admin'] = False
-        st.session_state['current_page'] = 'login'
+    today = date.today()
+    min_date = date(2007, 1, 1)
+    default_birth_date = min_date
 
-    # 현재 페이지 상태에 따라 라우팅
-    if not st.session_state.get('user_authenticated'):
-        render_login_page()
-    elif st.session_state.get('current_page') == 'home':
-        st.subheader(f"환영합니다! ({'관리자' if st.session_state.get('is_admin') else '일반 사용자'})")
-        render_home_page()
-    elif st.session_state.get('current_page') == 'admin_add':
-        render_admin_add_program_page()
+    with st.form("signup_form"):
+        st.write("사용자 정보를 입력해주세요. (가입 시 일반 사용자 권한이 부여됩니다)")
+        
+        email = st.text_input("이메일 주소", key="signup_email")
+        password = st.text_input("비밀번호 (6자 이상)", type="password", key="signup_password")
+        st.markdown("---")
+        school_name = st.text_input("학교 이름", key="signup_school")
+        class_number = st.text_input("반 번호", key="signup_class")
+        student_name = st.text_input("이름", key="signup_name")
+        
+        birth_date = st.date_input(
+            "생년월일", 
+            value=default_birth_date,
+            min_value=min_date,
+            max_value=today,
+            key="signup_birth",
+            format="YYYY.MM.DD"
+        )
+        
+        submitted = st.form_submit_button("회원가입 완료")
+
+        if submitted:
+            if not all([email, password, school_name, class_number, student_name, birth_date]):
+                st.error("모든 필드를 입력해 주세요.")
+            elif len(password) < 6:
+                st.error("비밀번호는 6자 이상이어야 합니다.")
+            elif birth_date < min_date or birth_date > today:
+                st.error("생년월일은 2007년 1월 1일부터 오늘 날짜까지만 선택 가능합니다.")
+            else:
+                # 일반 사용자 Mock 데이터 저장 (이 정보로 로그인을 시도할 수 있게 됩니다)
+                st.session_state.mock_user_normal = {
+                    'email': email,
+                    'password': password, 
+                    'schoolName': school_name,
+                    'classNumber': class_number,
+                    'studentName': student_name,
+                    'birthDate': birth_date.strftime("%Y-%m-%d"),
+                    'isAdmin': False # 일반 사용자
+                }
+                
+                st.success(f"{student_name}님, 회원가입이 완료되었습니다! 이제 이 정보로 로그인해 주세요.")
+                
+                navigate(PAGE_LOGIN)
+
+    st.markdown("---")
+    if st.button("로그인 화면으로 돌아가기", key="back_to_login_btn"):
+        navigate(PAGE_LOGIN)
+
+
+def render_home_page():
+    """홈 화면을 렌더링합니다. (HTML 컴포넌트 사용)"""
+    user_info = st.session_state.user_data
+    user_name = user_info.get('studentName', '사용자')
+    is_admin = user_info.get('isAdmin', False)
+    admin_status = "✅ 관리자" if is_admin else "👤 일반 사용자"
+
+    # 1. 제목과 '잡스리포트 기록하기', '나의 기록 보기', '프로그램 목록 보기' 버튼을 나란히 배치 (수정된 부분)
+    col_title, col_button_add, col_button_view, col_button_list = st.columns([2.5, 1, 1, 1])
+
+    with col_title:
+        st.title("🗺️ Job-Trekking 홈 💼")
+    
+    # 버튼을 제목 옆에 세로 중앙에 배치하기 위한 마크다운 공백
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
+
+    with col_button_add:
+        if st.button("📝 리포트 기록하기", key="navigate_to_report_from_home"):
+            navigate(PAGE_ADD_REPORT) 
+
+    with col_button_view: 
+        if st.button("📖 나의 기록 보기", key="navigate_to_view_reports_from_home"):
+            navigate(PAGE_VIEW_REPORTS) # 나의 기록 보기 페이지로 이동
+
+    with col_button_list: 
+        if st.button("🔎 프로그램 목록", key="navigate_to_program_list_from_home"):
+            navigate(PAGE_PROGRAM_LIST) # 프로그램 목록 보기 페이지로 이동
+
+    st.write(f"환영합니다, **{user_name}**님! 현재 권한: **{admin_status}**")
+    
+    # 관리자 기능 버튼 추가
+    if is_admin:
+        if st.button("새 프로그램 추가 (관리자 전용)", key="add_program_btn"):
+            navigate(PAGE_ADD_PROGRAM)
+
+    # home.html 파일 읽기
+    html_content = read_html_file('home.html')
+    
+    if html_content:
+        # 사용자 이름 등 동적 데이터를 HTML에 주입
+        html_content = html_content.replace('{{USER_NAME}}', user_name)
+        html_content = html_content.replace('{{USER_SCHOOL}}', user_info.get('schoolName', '학교 정보 없음'))
+        html_content = html_content.replace('{{USER_CLASS}}', user_info.get('classNumber', '반 정보 없음'))
+        html_content = html_content.replace('{{USER_IS_ADMIN}}', admin_status)
+        
+        components.html(
+            html_content,
+            height=700,
+            scrolling=True,
+        )
+    
+    st.markdown("---")
+    if st.button("로그아웃"):
+        st.session_state.user_data = None
+        navigate(PAGE_LOGIN)
+
+def render_program_list_page():
+    """Firestore에서 프로그램을 로드하고 표시하는 페이지를 렌더링합니다."""
+    st.title("진로 프로그램 검색 결과 🔎")
+    st.info("이 페이지의 프로그램 목록은 Streamlit 세션의 Mock 데이터로 표시됩니다.")
+
+    # Mock 데이터를 HTML 컴포넌트로 전달하여 표시하도록 할 수 있으나, 
+    # 현재는 read_html_file에서 Mock HTML을 반환하도록 처리합니다.
+
+    program_list_html = read_html_file('program_list.html')
+    
+    if program_list_html:
+        # Streamlit 컴포넌트 내에서 사용할 Firebase 설정 변수 주입 (현재 Mock이므로 기능하지 않음)
+        program_list_html = program_list_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
+        program_list_html = program_list_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
+        program_list_html = program_list_html.replace('{{APP_ID}}', appId)
+        
+        components.html(
+            program_list_html,
+            height=800,
+            scrolling=True,
+        )
+
+    st.markdown("---")
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_list"):
+        navigate(PAGE_HOME)
+
+def render_add_program_page():
+    """관리자가 새 프로그램을 Firestore에 추가할 수 있는 폼을 렌더링합니다."""
+    if not st.session_state.user_data or not st.session_state.user_data.get('isAdmin', False):
+        st.error("접근 권한이 없습니다.")
+        navigate(PAGE_HOME)
+        return
+
+    st.title("새 진로 프로그램 추가 (관리자 전용) ✏️")
+    st.info("여기에 입력된 프로그램은 Streamlit 세션에 임시로 저장됩니다.")
+
+    add_program_html = read_html_file('add_program.html')
+
+    if add_program_html:
+        add_program_html = add_program_html.replace('{{FIREBASE_CONFIG}}', json.dumps(firebaseConfig))
+        add_program_html = add_program_html.replace('{{INITIAL_AUTH_TOKEN}}', initialAuthToken)
+        add_program_html = add_program_html.replace('{{APP_ID}}', appId)
+
+        components.html(
+            add_program_html,
+            height=600,
+            scrolling=False,
+        )
+    
+    st.markdown("---")
+    if st.button("프로그램 목록 보기", key="back_to_list_from_add"):
+        navigate(PAGE_PROGRAM_LIST)
+
+def render_add_report_page():
+    """
+    HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다.
+    """
+    st.title("잡스리포트 기록하기 📝")
+    
+    # 1. HTML 컴포넌트 렌더링 (폼 입력 및 제출 버튼 담당)
+    add_report_html = read_html_file('add_report.html')
+    
+    component_value = components.html(
+        html=add_report_html, 
+        height=700, # 버튼이 포함되었으므로 높이 증가
+        scrolling=True,
+        # Streamlit-Component-Lib를 위한 key 설정
+        key="add_report_form_component"
+    )
+
+    # 2. HTML 컴포넌트로부터 전달받은 데이터 추출 및 처리
+    current_data = None
+    is_submitted = False
+    
+    # component_value가 딕셔너리 형태이고 'reportData' 키를 포함하는지 확인합니다.
+    if isinstance(component_value, dict) and 'reportData' in component_value:
+        current_data = component_value['reportData']
+        # 'submitted' 플래그는 HTML의 버튼 클릭 시에만 True로 설정됩니다.
+        is_submitted = component_value.get('submitted', False)
+
+    # 3. Streamlit 상태 관리 및 저장 로직 (HTML 제출 신호 대기)
+    st.markdown("---")
+
+    # A) 저장 성공 후 상태
+    if st.session_state.get('report_saved_successfully', False):
+        # 성공 메시지 표시
+        st.success("🎉 리포트가 성공적으로 저장되었습니다. 다음 활동을 선택해 주세요.")
+        
+        # NOTE: 페이지 이동 전에 False로 초기화하여 다음 렌더링 시 메시지가 다시 뜨지 않게 합니다.
+        st.session_state.report_saved_successfully = False 
+        
+        col_view, col_home = st.columns(2)
+        with col_view:
+            if st.button("📖 나의 기록 보기", key="post_save_view_reports"):
+                navigate(PAGE_VIEW_REPORTS)
+        with col_home:
+            if st.button("메인 화면으로 돌아가기", key="post_save_home"):
+                navigate(PAGE_HOME)
+
+    # B) 제출 신호 수신 상태 (HTML 버튼 클릭)
+    elif is_submitted and current_data:
+        # 필수 필드 체크: programName, experienceDate, rating, reportContent
+        is_valid = (
+            current_data.get('programName') and 
+            current_data.get('experienceDate') and 
+            current_data.get('rating') is not None and 
+            current_data.get('reportContent')
+        )
+
+        if is_valid:
+            
+            # 저장 로직 실행
+            success, message = save_report_to_firestore(current_data)
+            
+            if success:
+                st.session_state.report_saved_successfully = True
+                st.session_state.current_report_data = None # 임시 데이터 초기화
+                st.rerun() # 성공 메시지와 버튼을 표시하기 위해 페이지 새로고침
+            else:
+                st.error(f"⚠️ 리포트 저장 실패: {message}")
+        else:
+            # HTML에서 데이터가 넘어왔지만, 필수 필드가 비어있을 때
+            st.error("⚠️ 폼 데이터가 준비되지 않았습니다. 모든 필수 항목(프로그램명, 일자, 별점, 소감)을 입력했는지 확인해 주세요.")
+
+
+    # C) 기본 상태 (제출 신호가 없을 때)
+    # 이 영역에는 별도의 Streamlit 버튼을 배치하지 않습니다.
+
+    st.markdown("---")
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
+        navigate(PAGE_HOME)
+
+def render_view_reports_page():
+    """
+    사용자가 기록한 잡스리포트 목록을 보고 상세 내용을 확인하는 페이지를 렌더링합니다.
+    Streamlit Python 백엔드의 임시 저장소(`firestore_reports`)를 사용합니다.
+    """
+    st.title("나의 진로 체험 기록 📖")
+    st.info("이 페이지에서는 지금까지 작성한 잡스리포트 목록을 볼 수 있습니다. (개인 기록)")
+    
+    user_id = get_current_user_id()
+    if not user_id:
+        st.error("사용자 인증 정보를 찾을 수 없습니다. 로그인 상태를 확인해 주세요.")
+        return
+
+    # Python 백엔드 임시 저장소에서 리포트 로드
+    all_reports = st.session_state.firestore_reports.get(user_id, [])
+    
+    if not all_reports:
+        st.markdown("""
+            <div style="text-align: center; color: #6b7280; padding: 40px; border: 2px dashed #d1d5db; border-radius: 12px; margin-top: 20px;">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: block; margin: 0 auto 10px auto; width: 48px; height: 48px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <h3 style="font-size: 1.25rem; font-weight: 600; color: #1f2937;">작성된 리포트가 없습니다</h3>
+                <p style="margin-top: 5px; font-size: 0.875rem;">지금 바로 잡스리포트를 작성해 보세요!</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
     else:
-        # 정의되지 않은 페이지는 홈으로 리다이렉션
-        st.session_state['current_page'] = 'home'
-        st.rerun()
+        # 최신순 정렬 (createdAt은 ISO 문자열이므로 역순 정렬)
+        sorted_reports = sorted(all_reports, key=lambda x: x['createdAt'], reverse=True)
+        
+        st.sidebar.header("리포트 목록")
+        st.sidebar.markdown(f"총 **{len(sorted_reports)}**건의 기록이 있습니다.")
+
+        # Streamlit Selectbox를 사용하여 리포트 선택
+        report_titles = [f"{r['experienceDate']} - {r['programName']}" for r in sorted_reports]
+        
+        # 선택 목록이 비어있지 않은 경우에만 selectbox 표시
+        if report_titles:
+            selected_title = st.sidebar.selectbox("리포트 선택", report_titles)
+
+            # 선택된 리포트 찾기
+            selected_report_index = report_titles.index(selected_title)
+            selected_report = sorted_reports[selected_report_index]
+
+            # 5. 별점 렌더링 함수
+            def get_rating_stars(rating):
+                return "<span style='color: #fbbf24;'>★</span>" * rating + "<span style='color: #ccc;'>☆</span>" * (5 - rating)
+
+            # 상세 리포트 뷰 (선택된 리포트 표시)
+            st.markdown("---")
+            st.subheader(f"선택된 리포트: {selected_report['programName']}")
+            
+            col_date, col_field = st.columns(2)
+            with col_date:
+                st.markdown(f"**체험 일자:** `{selected_report['experienceDate']}`")
+            with col_field:
+                st.markdown(f"**분야:** `{selected_report['jobField']}`")
+
+            st.markdown("---")
+            st.markdown("### 체험 만족도")
+            # 별점은 1~5 사이의 정수여야 함
+            rating = selected_report.get('rating', 0)
+            rating = max(0, min(5, rating))
+            st.markdown(f"<p style='font-size: 2rem;'>{get_rating_stars(rating)}</p>", unsafe_allow_html=True)
+            
+            st.markdown("### 소감 및 내용")
+            st.markdown(f'<div style="background-color: #f7f7f7; padding: 15px; border-radius: 8px; white-space: pre-wrap; border-left: 5px solid #10b981;">{selected_report["reportContent"]}</div>', unsafe_allow_html=True)
+        else:
+             st.info("선택할 수 있는 리포트가 없습니다.")
+
+
+    st.markdown("---")
+    if st.button("메인 화면으로 돌아가기", key="back_to_home_from_view_reports"):
+        navigate(PAGE_HOME)
+
+
+# --- 5. 메인 렌더링 루프 ---
+
+current_user_authenticated = (st.session_state.user_data is not None)
+
+if st.session_state.current_page == PAGE_LOGIN:
+    render_login_page()
+elif st.session_state.current_page == PAGE_SIGNUP:
+    render_signup_page()
+elif st.session_state.current_page == PAGE_HOME and current_user_authenticated:
+    render_home_page()
+elif st.session_state.current_page == PAGE_PROGRAM_LIST and current_user_authenticated:
+    render_program_list_page()
+elif st.session_state.current_page == PAGE_ADD_PROGRAM and current_user_authenticated:
+    render_add_program_page()
+elif st.session_state.current_page == PAGE_ADD_REPORT and current_user_authenticated:
+    render_add_report_page()
+elif st.session_state.current_page == PAGE_VIEW_REPORTS and current_user_authenticated: # 신규 페이지 처리
+    render_view_reports_page()
+else:
+    # 인증되지 않은 상태에서 접근 시 로그인 페이지로 리다이렉션
+    st.session_state.current_page = PAGE_LOGIN
+    navigate(PAGE_LOGIN)
+
+st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
