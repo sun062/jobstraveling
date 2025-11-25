@@ -582,7 +582,7 @@ def render_add_program_page():
 def render_add_report_page():
     """
     HTML 컴포넌트로 폼을 표시하고, HTML 버튼을 통해 받은 신호로 저장 처리를 수행합니다.
-    (read_html_file의 안정성을 전제하고, 로드 실패 시 명확한 오류 UI를 제공합니다.)
+    (Mock HTML 반환 시 TypeError 방지를 위한 강력한 방어 로직 포함)
     """
     st.title("잡스리포트 기록하기 📝")
     
@@ -591,23 +591,22 @@ def render_add_report_page():
     component_value = None
     
     # --------------------------------------------------------------------------
-    # ✨ 최종 방어 로직: add_report_html이 유효한 문자열인지 다시 확인합니다.
-    # read_html_file이 빈 문자열을 반환하면 (로드 실패), HTML 컴포넌트 렌더링을 건너뜁니다.
+    # ✨ 최종 방어 로직: add_report_html이 유효한 문자열인지 확인합니다.
+    # .strip()을 통해 공백만 있는 빈 파일도 걸러내어 TypeError를 원천 차단합니다.
     # --------------------------------------------------------------------------
     if not isinstance(add_report_html, str) or not add_report_html.strip():
         # HTML 로드 실패 시 Streamlit에 오류 메시지를 표시하고, components.html 호출을 건너뜁니다.
-        st.error("⚠️ [심각한 오류] 리포트 입력 양식 HTML 파일 ('add_report.html')을 **불러올 수 없습니다**.")
-        st.warning("`read_html_file` 함수가 빈 문자열을 반환했습니다. **파일 경로**와 **파일 내용**을 반드시 확인해 주세요.")
+        st.error("⚠️ [CRITICAL ERROR] 리포트 입력 양식 HTML 파일 ('add_report.html')을 **불러올 수 없습니다**.")
+        st.warning("`read_html_file` 함수가 유효한 HTML을 반환하지 않았습니다. Mock 코드가 올바른지 확인해 주세요.")
         
         st.markdown("---")
-        # 오류 상태에서 홈으로 돌아가는 버튼 (다른 버튼들과 key가 겹치지 않도록 명확하게 정의)
-        if st.button("메인 화면으로 돌아가기", key="error_back_to_home"):
-            # navigate, PAGE_HOME 등의 변수는 외부에서 정의되었다고 가정합니다.
+        # 오류 상태에서 홈으로 돌아가는 버튼
+        if st.button("메인 화면으로 돌아가기", key="error_back_to_home_v5"):
             navigate(PAGE_HOME)
         return
     # --------------------------------------------------------------------------
     
-    # HTML이 유효한 문자열일 경우에만 component.html을 호출합니다. (Line 609 주변)
+    # HTML이 유효한 문자열일 경우에만 component.html을 호출합니다.
     # 이 로직을 통과하면 TypeError는 발생하지 않아야 합니다.
     component_value = components.html(
         html=add_report_html, 
@@ -660,7 +659,6 @@ def render_add_report_page():
         if is_valid:
             
             # 저장 로직 실행
-            # save_report_to_firestore 함수는 외부에서 정의되었다고 가정합니다.
             success, message = save_report_to_firestore(current_data)
             
             if success:
@@ -677,7 +675,7 @@ def render_add_report_page():
     # C) 기본 상태 (제출 신호가 없을 때, HTML 로드 성공 시)
     elif component_value is not None and not st.session_state.get('report_saved_successfully', False):
         st.markdown("---")
-        if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default"):
+        if st.button("메인 화면으로 돌아가기", key="back_to_home_from_report_default_v5"):
             navigate(PAGE_HOME)
             
 def render_view_reports_page():
@@ -779,6 +777,7 @@ else:
     navigate(PAGE_LOGIN)
 
 st.sidebar.markdown(f"**현재 로드 중인 페이지:** {st.session_state.current_page.upper()}")
+
 
 
 
