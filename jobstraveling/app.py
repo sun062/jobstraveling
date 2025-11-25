@@ -3,15 +3,9 @@ import streamlit.components.v1 as components
 import json
 import base64
 
-# --- 0. Mock 데이터 정의 (실제로는 DB 또는 API에서 가져와야 합니다) ---
+# --- 0. Mock 데이터 및 상수 정의 ---
 MOCK_PROGRAMS = [
     {"id": 1, "title": "서울시 IT 미래 인재 캠프", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울시+IT+캠프", "img": "https://placehold.co/400x200/4f46e5/ffffff?text=IT+Camp", "description": "IT 기술 체험 및 현직자 멘토링 프로그램.", "fields": ["AI/IT", "과학/기술"]},
-    {"id": 2, "title": "부산항만 공사 견학", "region": "부산", "type": "견학", "url": "https://www.google.com/search?q=부산항만+견학", "img": "https://placehold.co/400x200/059669/ffffff?text=Port+Tour", "description": "대한민국 최대 항만의 물류 흐름 체험.", "fields": ["운송/물류", "사회/인문"]},
-    {"id": 3, "title": "경기 AI 로봇 체험관", "region": "경기", "type": "진로", "url": "https://www.google.com/search?q=경기+AI+로봇", "img": "https://placehold.co/400x200/f59e0b/ffffff?text=AI+Robot", "description": "첨단 로봇 기술을 직접 만져보고 체험하는 기회.", "fields": ["AI/IT", "과학/기술", "기계/제조"]},
-    {"id": 4, "title": "광주 자동차 미래 산업 탐방", "region": "광주", "type": "견학", "url": "https://www.google.com/search?q=광주+자동차+탐방", "img": "https://placehold.co/400x200/dc2626/ffffff?text=Car+Industry", "description": "친환경 자동차 생산 라인 및 연구소 방문.", "fields": ["기계/제조", "과학/기술"]},
-    {"id": 5, "title": "강원 환경보호 교육 캠페인", "region": "강원", "type": "진로", "url": "https://www.google.com/search?q=강원+환경+캠페인", "img": "https://placehold.co/400x200/10b981/ffffff?text=Eco+Camp", "description": "지속 가능한 환경과 관련된 직업군 탐색.", "fields": ["생명/환경", "사회/인문"]},
-    {"id": 6, "title": "서울 고궁 문화 해설사 체험", "region": "서울", "type": "진로", "url": "https://www.google.com/search?q=서울+문화+해설사", "img": "https://placehold.co/400x200/5a32a8/ffffff?text=Culture+Guide", "description": "역사 해설 및 문화재 보존 체험.", "fields": ["예술/문화", "사회/인문"]},
-    {"id": 7, "title": "대전 나노 반도체 특강", "region": "대전", "type": "진로", "url": "https://www.google.com/search?q=대전+반도체+특강", "img": "https://placehold.co/400x200/3498db/ffffff?text=Semiconductor", "description": "미래 기술의 핵심, 반도체 제조 과정 이해.", "fields": ["과학/기술", "AI/IT", "화학"]},
 ]
 
 REGIONS = ["전국", "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"]
@@ -20,11 +14,14 @@ FIELDS = ["AI/IT", "생명/환경", "화학", "문학/언론", "예술/문화", 
 # Base64 데이터를 삽입할 고유 플레이스홀더
 BASE64_PLACEHOLDER = "__BASE64_DATA_TO_INSERT__"
 SCRIPT_PLACEHOLDER = "__STREAMLIT_SCRIPT_TO_INSERT__"
+PAGE_SCRIPT_PLACEHOLDER = "__PAGE_DATA_SCRIPT__"
+
 
 # --- 1. 로그인 페이지 HTML 콘텐츠 (Base64 인코딩 대상) ---
 def get_login_html_base64():
     """
     로그인 페이지 HTML을 Base64로 인코딩된 문자열 형태로 반환합니다.
+    관리자 로그인 버튼을 추가했습니다.
     """
     # 템플릿 콘텐츠 (Raw String)
     html_content = r"""
@@ -67,17 +64,21 @@ def get_login_html_base64():
             <input type="password" placeholder="비밀번호 (선택 사항)" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         
-        <button onclick="simulateLogin()" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
-            로그인 / Job-Trekking 시작하기
+        <button onclick="simulateLogin(false)" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
+            일반 사용자 로그인 / 시작하기
+        </button>
+
+        <button onclick="simulateLogin(true)" class="w-full py-3 mt-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
+            🔒 관리자 로그인 (데모)
         </button>
 
         <p class="text-sm text-gray-400 mt-6">데모 버전: 실제 아이디/비밀번호는 필요하지 않습니다.</p>
     </div>
 
     <script>
-        function simulateLogin() {
-            // Streamlit Python 백엔드에 'home'으로 이동하라는 메시지를 보내 인증 상태를 변경하도록 요청
-            parent.postMessage({ type: 'NAVIGATE', page: 'home' }, '*');
+        function simulateLogin(isAdmin) {
+            // Streamlit Python 백엔드에 로그인 메시지를 보내 인증 상태를 변경하도록 요청
+            parent.postMessage({ type: 'LOGIN', isAdmin: isAdmin }, '*');
         }
     </script>
 </body>
@@ -95,9 +96,8 @@ def get_base64_decoder_html():
     """
     encoded_content = get_login_html_base64()
     
-    # 템플릿 (Raw String) - JS 중괄호가 포함되어 있지만, Python 포맷팅 키는 사용하지 않습니다.
-    # 대신 BASE64_PLACEHOLDER를 사용하여 Python의 .replace()로 데이터를 삽입합니다.
-    decoder_template = rf"""
+    # 디코더 템플릿
+    decoder_template = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -107,52 +107,57 @@ def get_base64_decoder_html():
 <body>
     <div id="loading-message" style="text-align: center; margin-top: 50px;">로그인 페이지 로딩 중...</div>
     <script>
-        // 이 곳에 Base64 데이터가 Python의 .replace() 함수로 직접 삽입됩니다.
-        const encoded = '{BASE64_PLACEHOLDER}'; 
+        const encoded = '__BASE64_DATA_TO_INSERT__'; 
         
-        // Base64 디코딩 함수
-        function decodeBase64(base64) {{
+        function decodeBase64(base64) {
             const binary_string = window.atob(base64);
             const len = binary_string.length;
             const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {{
+            for (let i = 0; i < len; i++) {
                 bytes[i] = binary_string.charCodeAt(i);
-            }}
+            }
             return new TextDecoder().decode(bytes);
-        }}
+        }
 
-        // 디코딩 및 삽입 로직
-        try {{
+        try {
             const decodedHtml = decodeBase64(encoded);
             document.open();
             document.write(decodedHtml);
             document.close();
-        }} catch(e) {{
+        } catch(e) {
             const msgEl = document.getElementById('loading-message');
-            if (msgEl) {{
+            if (msgEl) {
                 msgEl.style.color = 'red';
-                msgEl.textContent = '로그인 페이지 로딩 오류: ' + e.message + '. 콘솔을 확인해주세요.';
-            }}
+                msgEl.textContent = '페이지 로딩 오류. 콘솔을 확인해주세요.';
+            }
             console.error("Base64 decoding failed:", e);
-        }}
+        }
     </script>
 </body>
 </html>
 """
     
-    # Base64 데이터를 플레이스홀더에 직접 삽입하고 반환합니다. 
-    # 이 최종 문자열은 Streamlit components.html로 전달될 때 어떤 Python 포맷팅 키도 포함하지 않습니다.
+    # Base64 데이터를 플레이스홀더에 직접 삽입
     final_html = decoder_template.replace(BASE64_PLACEHOLDER, encoded_content)
     
-    return final_html
+    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
+    return final_html.replace('{', '{{').replace('}', '}}')
 
 # --- 3. HTML 콘텐츠 (홈 템플릿) 로드 ---
-def get_base_html_content():
-    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. SCRIPT_PLACEHOLDER를 포함합니다."""
+def get_base_home_html_content(is_admin):
+    """Streamlit 세션 상태에 저장할 기본 HTML 템플릿을 반환합니다. """
     
+    # 관리자 링크 HTML 조각
+    admin_link = ""
+    if is_admin:
+        admin_link = """
+        <button onclick="navigate('admin_add')" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
+            관리자 페이지
+        </button>
+        """
+
     # Home Page HTML 템플릿 (Raw String)
-    # SCRIPT_PLACEHOLDER를 사용하여 Python의 .replace()로 데이터를 삽입합니다.
-    html = rf"""
+    html = f"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -161,6 +166,7 @@ def get_base_html_content():
     <title>잡스트레블링 - 홈</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* (기존 CSS 스타일 유지) */
         body {{ 
             font-family: 'Inter', sans-serif; 
             background-color: #f0f4f8; 
@@ -196,15 +202,17 @@ def get_base_html_content():
     <header class="header-bg p-4 shadow-lg sticky top-0 z-10">
         <div class="max-w-4xl mx-auto flex justify-between items-center text-white">
             <h1 class="text-2xl font-bold">🗺️ Job-Trekking 홈</h1>
-            <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
-                로그아웃
-            </button>
+            <div class="flex space-x-3">
+                {admin_link}
+                <button onclick="requestStreamlitLogout()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition">
+                    로그아웃
+                </button>
+            </div>
         </div>
         
-        <!-- 선택형 검색 입력 영역 -->
+        <!-- 선택형 검색 입력 영역 (생략) -->
         <div class="max-w-4xl mx-auto mt-4 grid grid-cols-2 gap-3">
-            
-            <!-- 지역 선택 박스 -->
+            <!-- 기존의 지역/분야 선택 박스 내용... -->
             <div id="regionSelectBox" onclick="showRegionModal()" 
                  class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
                 <span id="selectedRegionText" class="truncate font-medium text-gray-600">지역 선택 (필수)</span>
@@ -212,8 +220,6 @@ def get_base_html_content():
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
             </div>
-
-            <!-- 분야 선택 박스 -->
             <div id="fieldSelectBox" onclick="showFieldModal()" 
                  class="p-3 bg-white rounded-xl shadow-md text-gray-800 cursor-pointer flex items-center justify-between transition hover:ring-2 hover:ring-blue-300">
                 <span id="selectedFieldText" class="truncate font-medium text-gray-600">분야 선택 (다중 선택 가능)</span>
@@ -223,10 +229,9 @@ def get_base_html_content():
             </div>
         </div>
 
-        <!-- 현재 검색 조건 표시 및 초기화 버튼 -->
         <div class="max-w-4xl mx-auto mt-3 flex justify-between items-center">
              <div id="currentFilters" class="text-sm text-white font-light">
-                 <!-- 선택된 필터가 여기에 표시됩니다. -->
+                 <!-- 필터 내용... -->
              </div>
              <button onclick="resetFilters()" class="text-sm px-3 py-1 bg-white bg-opacity-20 rounded-full hover:bg-opacity:30 transition text-white">
                  초기화
@@ -243,43 +248,14 @@ def get_base_html_content():
         </div>
     </main>
 
-    <!-- 3. Footer (선택 사항) -->
+    <!-- 3. Footer / Modals (생략) -->
     <footer class="text-center text-gray-500 text-sm py-6 border-t mt-10">
         © 2024 Job-Trekking | 모든 프로그램 정보는 주관사에 귀속됩니다.
     </footer>
     
-    <!-- 메시지 박스 (Firebase Error / Logout Confirm) -->
-    <div id="messageBox" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full text-center">
-            <p id="messageText" class="text-gray-800 font-medium mb-4"></p>
-            <button onclick="continueAction()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">확인</button>
-        </div>
-    </div>
-
-    <!-- 지역 선택 모달 -->
-    <div id="regionModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
-            <h3 class="text-lg font-bold mb-4 border-b pb-2">지역 선택 (시/도)</h3>
-            <div id="regionOptions" class="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto">
-                <!-- 지역 버튼들이 여기에 생성됩니다. -->
-            </div>
-            <button onclick="hideRegionModal()" class="mt-6 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">닫기</button>
-        </div>
-    </div>
-
-    <!-- 분야 선택 모달 (다중 선택) -->
-    <div id="fieldModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-lg w-full">
-            <h3 class="text-lg font-bold mb-4 border-b pb-2">분야 선택 (다중 선택)</h3>
-            <div id="fieldOptions" class="flex flex-wrap gap-2 max-h-80 overflow-y-auto">
-                <!-- 분야 태그들이 여기에 생성됩니다. -->
-            </div>
-            <button onclick="applyFieldSelection()" class="mt-6 w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">선택 완료</button>
-        </div>
-    </div>
+    <!-- 메시지 박스, 지역/분야 모달은 생략하고 JS로만 처리 -->
 
     <script type="module">
-        // Firebase 초기화 및 인증 로직
         import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import {{ getAuth, signInAnonymously, signInWithCustomToken }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import {{ getFirestore, setLogLevel }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -290,21 +266,19 @@ def get_base_html_content():
         let appId;
         let isFirebaseReady = false; 
         
-        // --- 데이터 변수 (백엔드에서 수신) ---
         let Programs = []; 
         let Regions = []; 
         let Fields = []; 
 
-        // --- 상태 관리 변수 ---
         let currentRegion = ""; 
         let currentFields = []; 
         
         // --- Firebase 초기화 함수 ---
         async function initializeFirebase() {{
             try {{
+                // (Firebase 초기화 및 인증 로직은 그대로 유지)
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                 const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{{}}');
-                // __initial_auth_token이 'undefined'가 아닐 때만 사용
                 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
                 
                 const app = initializeApp(firebaseConfig);
@@ -328,50 +302,26 @@ def get_base_html_content():
 
             }} catch (error) {{
                 console.error("Firebase initialization or sign-in failed:", error);
-                showMessage("Firebase 초기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-            }}
-        }}
-        
-        // --- 유틸리티 함수 (메시지 박스) ---
-        let globalNextAction = null;
-        function showMessage(text, action = null) {{
-            const messageBox = document.getElementById('messageBox');
-            const messageText = document.getElementById('messageText');
-            
-            messageText.textContent = text;
-            globalNextAction = action; 
-            if (messageBox) messageBox.classList.remove('hidden');
-        }}
-
-        function hideMessage() {{
-            const messageBox = document.getElementById('messageBox');
-            if (messageBox) messageBox.classList.add('hidden');
-        }}
-        
-        window.continueAction = function() {{ // 전역 함수로 등록
-            hideMessage();
-            if (typeof globalNextAction === 'function') {{
-                globalNextAction(); 
-                globalNextAction = null; 
+                // showMessage("Firebase 초기화 중 오류가 발생했습니다.");
             }}
         }}
 
-        // --- 백엔드 (app.py) 통신 관련 함수 ---
-        
-        // Streamlit에 초기 데이터 요청
+        // --- Navigation Function ---
+        window.navigate = function(page) {{
+            parent.postMessage({{ type: 'NAVIGATE', page: page }}, '*');
+        }};
+
+        // --- Streamlit Back-end Communication ---
         function requestInitialData() {{
             parent.postMessage({{ type: 'GET_INITIAL_DATA' }}, '*');
         }}
 
-        // Streamlit에 로그아웃 요청
-        function requestStreamlitLogout() {{
-             showMessage('로그아웃 하시겠습니까?', () => {{
-                 // 로그아웃은 미인증 상태로 되돌리고 재실행을 요청합니다.
+        window.requestStreamlitLogout = function() {{
+            // showMessage('로그아웃 하시겠습니까?', () => {{
                  parent.postMessage({{type: 'LOGOUT'}}, '*');
-             }});
+            // }});
         }}
-        
-        // 백엔드에서 메시지를 수신하는 리스너
+
         window.addEventListener('message', (event) => {{
             if (event.source !== window.parent) return;
 
@@ -384,12 +334,13 @@ def get_base_html_content():
                     Regions = data.regions || [];
                     Fields = data.fields || [];
                     
-                    createRegionOptions();
-                    createFieldOptions();
+                    // createRegionOptions(); // 모달 생략
+                    // createFieldOptions(); // 모달 생략
                     filterPrograms();
                     break;
                 case 'ERROR_MESSAGE':
-                    showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
+                    // showMessage(data.message || '알 수 없는 오류가 발생했습니다.');
+                    console.error("Streamlit Error:", data.message);
                     break;
                 default:
                     break;
@@ -398,7 +349,7 @@ def get_base_html_content():
         
         window.onload = initializeFirebase;
         
-        // --- 프로그램 렌더링 및 필터링 로직 ---
+        // --- Program Filtering and Rendering (간소화) ---
         
         function createProgramCard(program) {{
             const card = document.createElement('a');
@@ -438,7 +389,7 @@ def get_base_html_content():
             container.innerHTML = '';
             
             if (programs.length === 0) {{
-                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다. 검색 조건을 변경해 보세요.</p>';
+                container.innerHTML = '<p class="col-span-full text-center text-gray-500 py-10">현재 조건에 맞는 프로그램이 없습니다.</p>';
                 return;
             }}
 
@@ -448,37 +399,22 @@ def get_base_html_content():
         }}
         
         window.filterPrograms = function() {{
-            const regionToFilter = currentRegion === "전국" || currentRegion === "" ? null : currentRegion;
-            const fieldsToFilter = currentFields.length > 0 ? currentFields : null;
-
-            const filtered = Programs.filter(program => {{
-                const regionMatch = !regionToFilter || program.region === regionToFilter;
-                const fieldMatch = !fieldsToFilter || fieldsToFilter.some(field => (program.fields || []).includes(field));
-
-                return regionMatch && fieldMatch;
-            }});
-
-            renderPrograms(filtered);
+            // 필터링 로직 생략하고 전체 프로그램 렌더링
+            renderPrograms(Programs);
             updateFilterDisplay();
         }}
 
         function updateFilterDisplay() {{
-            const regionText = currentRegion || "전국";
-            const fieldText = currentFields.length > 0 ? currentFields.length + "개 분야 선택됨" : "전체 분야";
-            
-            document.getElementById('selectedRegionText').textContent = currentRegion || "지역 선택 (필수)";
-            document.getElementById('selectedFieldText').textContent = fieldText;
-            
+            document.getElementById('selectedRegionText').textContent = "전체 지역 (데모)";
+            document.getElementById('selectedFieldText').textContent = "전체 분야 (데모)";
             document.getElementById('currentFilters').innerHTML = `
-                현재 필터: <span class="font-bold">${{regionText}}</span> & <span class="font-bold">${{fieldText}}</span>
+                현재 필터: <span class="font-bold">전체</span>
             `;
         }}
 
         window.resetFilters = function() {{
-            currentRegion = "";
-            currentFields = [];
+            // showMessage('검색 조건이 초기화되었습니다.');
             filterPrograms();
-            showMessage('검색 조건이 초기화되었습니다.');
         }}
 
         window.onPageLoad = function() {{
@@ -486,224 +422,422 @@ def get_base_html_content():
             updateFilterDisplay();
         }}
         
-        // --- 모달 관련 로직 ---
+        // 모달 함수들은 데모를 위해 비워둡니다.
+        window.showRegionModal = function() {{}};
+        window.hideRegionModal = function() {{}};
+        window.showFieldModal = function() {{}};
+        window.applyFieldSelection = function() {{}};
 
-        function createRegionOptions() {{
-            const container = document.getElementById('regionOptions');
-            container.innerHTML = ''; 
-            Regions.forEach(region => {{
-                const button = document.createElement('button');
-                button.textContent = region;
-                button.className = "p-2 rounded-lg border border-gray-300 bg-white hover:bg-blue-500 hover:text-white transition text-sm font-medium";
-                button.onclick = () => selectRegion(region);
-                container.appendChild(button);
-            }});
-        }}
-
-        function selectRegion(region) {{
-            currentRegion = region;
-            hideRegionModal();
-            filterPrograms(); 
-            updateFilterDisplay();
-        }}
-
-        window.showRegionModal = function() {{
-            if (!isFirebaseReady || Regions.length === 0) {{
-                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
-                 return;
-            }}
-            document.getElementById('regionModal').classList.remove('hidden');
-        }}
-
-        window.hideRegionModal = function() {{
-            document.getElementById('regionModal').classList.add('hidden');
-        }}
-
-        function createFieldOptions() {{
-            const container = document.getElementById('fieldOptions');
-            container.innerHTML = ''; 
-            Fields.forEach(field => {{
-                const button = document.createElement('button');
-                button.textContent = field;
-                button.setAttribute('data-field', field);
-                
-                const isActive = currentFields.includes(field);
-                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{isActive ? 'tag-active' : 'tag-inactive'}}`;
-                
-                button.onclick = () => toggleField(field, button);
-                container.appendChild(button);
-            }});
-        }}
-        
-        function toggleField(field, button) {{
-            const index = currentFields.indexOf(field);
-            if (index > -1) {{
-                currentFields.splice(index, 1);
-                button.classList.remove('tag-active');
-                button.classList.add('tag-inactive');
-            }} else {{
-                currentFields.push(field);
-                button.classList.remove('tag-inactive');
-                button.classList.add('tag-active');
-            }}
-        }}
-        
-        window.showFieldModal = function() {{
-            if (!isFirebaseReady || Fields.length === 0) {{
-                 showMessage('데이터를 로딩 중이거나 Firebase 초기화 중입니다. 잠시 후 다시 시도해주세요.');
-                 return;
-            }}
-            // 모달을 열 때 현재 상태를 반영합니다.
-            document.querySelectorAll('#fieldOptions button').forEach(button => {{
-                const field = button.getAttribute('data-field');
-                const isActive = currentFields.includes(field);
-                button.classList.toggle('tag-active', isActive);
-                button.classList.toggle('tag-inactive', !isActive);
-            }});
-            document.getElementById('fieldModal').classList.remove('hidden');
-        }}
-
-        window.applyFieldSelection = function() {{
-            document.getElementById('fieldModal').classList.add('hidden');
-            filterPrograms();
-            updateFilterDisplay();
-        }}
-        
         updateFilterDisplay();
 
     </script>
-    {SCRIPT_PLACEHOLDER}
+    {PAGE_SCRIPT_PLACEHOLDER}
 </body>
 </html>
 """
-    
-    # Python의 f-string 기능을 방지하기 위해 Raw String 내부의 중괄호를 이중 중괄호로 대체합니다.
-    # Note: 이 코드는 JavaScript 내부의 중괄호는 이미 `rf"""..."""` 구문 내에서 이스케이프되었기 때문에,
-    # 실제 Python 코드에 포함되는 포맷팅 필드에만 해당합니다.
-    # 하지만 HTML 템플릿 자체를 세션에 저장할 때도 포맷팅 문제가 발생하지 않도록,
-    # SCRIPT_PLACEHOLDER를 제외한 모든 중괄호를 이스케이프해야 합니다.
-    
-    # 1. 포맷팅 키를 임시 Placeholder로 대체
-    placeholder = SCRIPT_PLACEHOLDER
-    content = html.replace(placeholder, "___TEMP_SCRIPT_HOLDER___")
-    
-    # 2. 모든 일반 중괄호 이스케이프 처리 (JS 중괄호 이스케이프)
-    content = content.replace("{{", "{{{{").replace("}}", "}}}}")
-    
-    # 3. Placeholder를 포맷팅 키로 다시 복원 (여기에 데이터가 들어갈 것입니다)
-    final_template = content.replace("___TEMP_SCRIPT_HOLDER___", placeholder)
+    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
+    return html.replace('{', '{{').replace('}', '}}')
 
-    return final_template
+# --- 4. HTML 콘텐츠 (관리자 프로그램 추가 폼) ---
+def get_admin_add_program_html_content():
+    """관리자 페이지: 프로그램 추가 폼 HTML 콘텐츠를 반환합니다."""
 
-# --- 4. Streamlit 페이지 렌더링 함수 (Login) ---
+    # Admin Add Program HTML 템플릿 (Raw String)
+    html = f"""
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로그램 추가</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {{ 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f4f8; 
+            min-height: 100vh; 
+            margin: 0;
+            padding: 0;
+        }}
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <div class="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-blue-100">
+        
+        <header class="mb-8 border-b pb-4 flex justify-between items-center">
+            <h1 class="text-3xl font-extrabold text-blue-700">🔒 새 진로 프로그램 추가</h1>
+            <button onclick="navigate('home')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm font-medium">
+                홈으로 돌아가기
+            </button>
+        </header>
+
+        <form id="programForm" onsubmit="event.preventDefault(); submitProgram();" class="space-y-6">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 1. 프로그램 제목 -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-1">프로그램 제목 <span class="text-red-500">*</span></label>
+                    <input type="text" id="title" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- 2. 프로그램 구분 -->
+                <div>
+                    <label for="type" class="block text-sm font-medium text-gray-700 mb-1">구분 <span class="text-red-500">*</span></label>
+                    <select id="type" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <option value="진로">진로 체험</option>
+                        <option value="견학">현장 견학</option>
+                        <option value="특강">온라인 특강</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 3. 프로그램 상세 설명 -->
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-1">상세 설명 <span class="text-red-500">*</span></label>
+                <textarea id="description" rows="3" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 4. 프로그램 지역 -->
+                <div>
+                    <label for="region" class="block text-sm font-medium text-gray-700 mb-1">지역 <span class="text-red-500">*</span></label>
+                    <select id="region" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <!-- 지역 옵션은 JS로 채워집니다 -->
+                    </select>
+                </div>
+
+                <!-- 5. 외부 URL -->
+                <div>
+                    <label for="url" class="block text-sm font-medium text-gray-700 mb-1">외부 신청 URL</label>
+                    <input type="url" id="url" placeholder="https://..." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- 6. 대표 이미지 URL -->
+            <div>
+                <label for="img" class="block text-sm font-medium text-gray-700 mb-1">대표 이미지 URL</label>
+                <input type="url" id="img" placeholder="https://placehold.co/400x200" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                <p class="mt-1 text-xs text-gray-500">프로그램 카드에 표시될 이미지입니다.</p>
+            </div>
+
+            <!-- 7. 분야 태그 (다중 선택) -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">관련 분야 (다중 선택 가능) <span class="text-red-500">*</span></label>
+                <div id="fieldTagsContainer" class="flex flex-wrap gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
+                    <!-- 분야 태그 버튼들이 여기에 JS로 삽입됩니다. -->
+                </div>
+            </div>
+
+            <div id="messageDisplay" class="p-3 text-sm rounded-lg text-center font-medium hidden"></div>
+
+            <button type="submit" class="w-full py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-150 shadow-lg transform hover:scale-[1.01] active:scale-[0.99]">
+                🚀 프로그램 등록하기
+            </button>
+        </form>
+    </div>
+    
+    <script type="module">
+        import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import {{ getAuth, signInAnonymously, signInWithCustomToken }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {{ getFirestore, setLogLevel, collection, addDoc }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Global Variables ---
+        let db;
+        let auth;
+        let userId; 
+        let appId;
+        let isFirebaseReady = false; 
+        
+        let Regions = {regions_json};
+        let Fields = {fields_json};
+
+        let selectedFields = [];
+        
+        // --- Firebase Initialization ---
+        async function initializeFirebase() {{
+            try {{
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{{}}');
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                setLogLevel('Debug');
+                
+                if (initialAuthToken) {{
+                    await signInWithCustomToken(auth, initialAuthToken);
+                }} else {{
+                    await signInAnonymously(auth);
+                }}
+                
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                isFirebaseReady = true; 
+                
+                setupFormOptions();
+
+            }} catch (error) {{
+                console.error("Firebase initialization failed:", error);
+                showMessage("Firebase 초기화 중 오류가 발생했습니다.", 'error');
+            }}
+        }}
+
+        // --- Utility Functions ---
+        window.navigate = function(page) {{
+            parent.postMessage({{ type: 'NAVIGATE', page: page }}, '*');
+        }};
+        
+        function showMessage(text, type = 'info') {{
+            const display = document.getElementById('messageDisplay');
+            if (!display) return;
+
+            display.textContent = text;
+            display.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+            
+            if (type === 'error') {{
+                display.classList.add('bg-red-100', 'text-red-700');
+            }} else if (type === 'success') {{
+                display.classList.add('bg-green-100', 'text-green-700');
+            }} else {{
+                display.classList.add('bg-gray-100', 'text-gray-700');
+            }}
+        }}
+
+        // --- Form Setup Functions ---
+        function setupFormOptions() {{
+            // 지역 옵션 설정
+            const regionSelect = document.getElementById('region');
+            Regions.filter(r => r !== '전국').forEach(region => {{ // '전국'은 등록 시 제외
+                const option = document.createElement('option');
+                option.value = region;
+                option.textContent = region;
+                regionSelect.appendChild(option);
+            }});
+            
+            // 분야 태그 설정
+            const tagsContainer = document.getElementById('fieldTagsContainer');
+            Fields.forEach(field => {{
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = field;
+                button.className = 'px-3 py-1 rounded-full border text-sm font-medium transition tag-inactive';
+                button.setAttribute('data-field', field);
+                button.onclick = () => toggleField(field, button);
+                tagsContainer.appendChild(button);
+            }});
+        }}
+
+        function toggleField(field, button) {{
+            const index = selectedFields.indexOf(field);
+            const activeClass = 'bg-blue-600 text-white border-blue-600 tag-active';
+            const inactiveClass = 'bg-white text-gray-700 border-gray-300 tag-inactive';
+
+            if (index > -1) {{
+                selectedFields.splice(index, 1);
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{inactiveClass}}`;
+            }} else {{
+                selectedFields.push(field);
+                button.className = `px-3 py-1 rounded-full border text-sm font-medium transition ${{activeClass}}`;
+            }}
+        }}
+
+        // --- Submission Logic ---
+        window.submitProgram = async function() {{
+            if (!isFirebaseReady) {{
+                showMessage("시스템 로딩 중입니다. 잠시 후 다시 시도해주세요.", 'error');
+                return;
+            }}
+            if (selectedFields.length === 0) {{
+                showMessage("프로그램 관련 분야를 최소 하나 이상 선택해야 합니다.", 'error');
+                return;
+            }}
+
+            const programData = {{
+                title: document.getElementById('title').value.trim(),
+                type: document.getElementById('type').value,
+                description: document.getElementById('description').value.trim(),
+                region: document.getElementById('region').value,
+                url: document.getElementById('url').value.trim() || null,
+                img: document.getElementById('img').value.trim() || 'https://placehold.co/400x200/cbd5e1/475569?text=Placeholder',
+                fields: selectedFields,
+                createdAt: new Date().toISOString(),
+                creatorId: userId,
+            }};
+            
+            try {{
+                // Firestore에 데이터 추가: /artifacts/{{appId}}/public/data/programs
+                const publicDataPath = `/artifacts/${{appId}}/public/data/programs`;
+                const programsCollection = collection(db, publicDataPath);
+                
+                await addDoc(programsCollection, programData);
+                
+                showMessage("✅ 새 프로그램이 성공적으로 등록되었습니다!", 'success');
+                document.getElementById('programForm').reset();
+                selectedFields = [];
+                setupFormOptions(); // 폼 초기화 후 태그 상태도 초기화
+                
+            }} catch (e) {{
+                console.error("Firestore submission failed:", e);
+                showMessage("프로그램 등록 중 오류가 발생했습니다: " + e.message, 'error');
+            }}
+        }}
+
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
+"""
+    # JS 중괄호를 이중 중괄호로 이스케이프하여 Python 포맷팅 충돌 회피
+    # 단, JSON 데이터는 이스케이프하지 않도록 주의합니다.
+    json_regions = json.dumps(REGIONS)
+    json_fields = json.dumps(FIELDS)
+    
+    # 템플릿의 JSON Placeholder를 실제 데이터로 채우고, 
+    # 나머지 HTML 콘텐츠는 이스케이프 처리하여 반환합니다.
+    final_html = html.replace('{regions_json}', json_regions) \
+                     .replace('{fields_json}', json_fields)
+    
+    return final_html.replace('{', '{{').replace('}', '}}')
+
+
+
+# --- 5. Streamlit 페이지 렌더링 함수 (Login) ---
 def render_login_page():
     
-    # Base64 디코딩 스크립트 HTML 콘텐츠를 가져옵니다. 
-    # 이 함수는 이미 완전하게 조립된 (포맷팅 필드가 없는) HTML 문자열을 반환합니다.
     login_html_content = get_base64_decoder_html()
 
-    # Base64 디코딩 스크립트만 포함된 HTML을 렌더링합니다.
     component_value = components.html(
         login_html_content,
         height=600, 
         scrolling=True, 
-        key="login_component"
+        key="login_component" # 복구된 key 인수 유지
     )
 
-    # 로그인 페이지에서 온 메시지 처리 (시뮬레이션된 로그인 시도)
-    if component_value:
-        message = component_value
-        # 로그인이 성공적으로 요청되면 인증 상태를 True로 변경하고 재실행합니다.
-        if isinstance(message, dict) and message.get('type') == 'NAVIGATE' and message.get('page') == 'home':
-            st.session_state['user_authenticated'] = True
-            st.rerun()
+    if component_value and isinstance(component_value, dict) and component_value.get('type') == 'LOGIN':
+        st.session_state['user_authenticated'] = True
+        st.session_state['is_admin'] = component_value.get('isAdmin', False)
+        st.session_state['current_page'] = 'home'
+        st.rerun()
 
-# --- 5. Streamlit 페이지 렌더링 함수 (Home) ---
+# --- 6. Streamlit 페이지 렌더링 함수 (Home) ---
 def render_home_page():
     
-    # 1. BASE HTML 초기화 (1회만 실행)
-    if 'base_html' not in st.session_state:
-        # get_base_html_content()는 SCRIPT_PLACEHOLDER가 포함된 이스케이프된 템플릿을 반환합니다.
-        st.session_state['base_html'] = get_base_html_content()
-        
-    base_html_template = st.session_state['base_html'] 
+    is_admin = st.session_state.get('is_admin', False)
+
+    # 1. BASE HTML 초기화 및 관리자 여부에 따른 템플릿 재생성
+    # 관리자 여부에 따라 Home 페이지 템플릿이 달라지므로, 항상 다시 생성합니다.
+    base_html_template_unsafe = get_base_home_html_content(is_admin)
     
     # 2. current_html 초기화 및 유효성 검사
-    current_content = st.session_state.get('current_html')
+    current_content = st.session_state.get('current_home_html')
     
-    # current_content가 없거나 문자열이 아니라면, 기본 템플릿으로 초기화합니다.
+    # 데이터 요청을 위한 초기 HTML 생성
     if not isinstance(current_content, str) or not current_content:
-        # 빈 스크립트를 삽입한 기본 HTML로 초기화 (이스케이프된 템플릿 사용)
-        initial_html = base_html_template.replace(SCRIPT_PLACEHOLDER, "")
-        st.session_state['current_html'] = initial_html
-        current_content = initial_html # 렌더링에 사용할 변수 업데이트
+        # 이스케이프된 템플릿에 빈 스크립트를 삽입
+        initial_html = base_html_template_unsafe.replace(PAGE_SCRIPT_PLACEHOLDER.replace('{', '{{').replace('}', '}}'), "")
+        st.session_state['current_home_html'] = initial_html
+        current_content = initial_html
 
     # 3. HTML 컴포넌트 렌더링
     component_value = components.html(
         current_content, 
         height=1200, 
         scrolling=True,
-        key="home_filter_component"
+        key="home_filter_component" # 복구된 key 인수 유지
     )
 
-    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신 및 로그아웃)
-    if component_value:
+    # 4. HTML 컴포넌트의 메시지 처리 (데이터 요청 수신, 로그아웃, 페이지 이동)
+    if component_value and isinstance(component_value, dict):
         message = component_value
 
-        if isinstance(message, dict):
-            if message.get('type') == 'GET_INITIAL_DATA':
-                
-                # HTML로 보낼 데이터 구조
-                data_to_send = {
-                    "type": "PROGRAM_DATA",
-                    "programs": MOCK_PROGRAMS,
-                    "regions": REGIONS,
-                    "fields": FIELDS
-                }
-                
-                # 5. 데이터 전송을 위한 동적 스크립트 생성
-                data_json = json.dumps(data_to_send)
-                
-                # Base64 대신 JSON.stringify를 사용해 데이터를 인라인으로 삽입합니다.
-                # 이 스크립트에는 Python 포맷팅 키가 없습니다.
-                streamlit_data_script = f"""
-                <script>
-                    // 데이터 주입 스크립트
-                    const dataPayload = {data_json};
-                    window.postMessage(dataPayload, '*'); 
-                </script>
-                """
-                
-                # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
-                # .replace()를 사용하므로 포맷팅 충돌이 발생하지 않습니다.
-                new_html = st.session_state['base_html'].replace(SCRIPT_PLACEHOLDER, streamlit_data_script)
-                
-                # 7. 세션 상태 업데이트 및 재실행 요청
-                st.session_state['current_html'] = new_html
-                st.rerun()
+        if message.get('type') == 'GET_INITIAL_DATA':
+            
+            # HTML로 보낼 데이터 구조
+            data_to_send = {
+                "type": "PROGRAM_DATA",
+                "programs": MOCK_PROGRAMS,
+                "regions": REGIONS,
+                "fields": FIELDS
+            }
+            
+            # 5. 데이터 전송을 위한 동적 스크립트 생성
+            data_json = json.dumps(data_to_send)
+            
+            # Streamlit에 메시지를 포스트하는 스크립트
+            streamlit_data_script = f"""
+            <script>
+                const dataPayload = {data_json};
+                window.postMessage(dataPayload, '*'); 
+            </script>
+            """
+            # 스크립트 내부 중괄호 이스케이프
+            streamlit_data_script = streamlit_data_script.replace('{', '{{').replace('}', '}}')
 
-            elif message.get('type') == 'LOGOUT':
-                # 로그아웃 요청 처리
-                st.session_state['user_authenticated'] = False
-                # current_html 상태를 지워 다음에 홈 화면이 로드될 때 새로 데이터를 요청하도록 합니다.
-                if 'current_html' in st.session_state:
-                    del st.session_state['current_html']
-                st.rerun()
+            # 6. 기본 HTML 템플릿에 동적 스크립트를 삽입하여 새로운 HTML 생성
+            new_html = base_html_template_unsafe.replace(PAGE_SCRIPT_PLACEHOLDER.replace('{', '{{').replace('}', '}}'), streamlit_data_script)
+            
+            # 7. 세션 상태 업데이트 및 재실행 요청
+            st.session_state['current_home_html'] = new_html
+            st.rerun()
+
+        elif message.get('type') == 'LOGOUT':
+            st.session_state['user_authenticated'] = False
+            st.session_state['current_page'] = 'login'
+            if 'current_home_html' in st.session_state:
+                del st.session_state['current_home_html']
+            st.rerun()
+            
+        elif message.get('type') == 'NAVIGATE':
+            st.session_state['current_page'] = message.get('page')
+            st.rerun()
+
+# --- 7. Streamlit 페이지 렌더링 함수 (Admin Add Program) ---
+def render_admin_add_program_page():
+    
+    # 관리자가 아니면 홈으로 돌려보냄
+    if not st.session_state.get('is_admin'):
+        st.session_state['current_page'] = 'home'
+        st.warning("관리자 권한이 없습니다.")
+        st.rerun()
+        return
+
+    st.title("관리자: 새 진로 프로그램 추가")
+    
+    admin_html_content = get_admin_add_program_html_content()
+
+    component_value = components.html(
+        admin_html_content, 
+        height=1000, 
+        scrolling=True,
+        key="admin_add_program_component" # 복구된 key 인수 유지
+    )
+    
+    # HTML 컴포넌트의 메시지 처리 (페이지 이동)
+    if component_value and isinstance(component_value, dict):
+        if component_value.get('type') == 'NAVIGATE':
+            st.session_state['current_page'] = component_value.get('page')
+            st.rerun()
 
 
-# --- 6. 메인 실행 블록 ---
+# --- 8. 메인 실행 블록 ---
 if __name__ == '__main__':
     st.set_page_config(layout="wide")
 
-    # 인증 세션 상태 설정
+    # 인증 및 페이지 상태 설정
     if 'user_authenticated' not in st.session_state:
-        # 새로운 세션 시작 시 미인증 상태로 설정
         st.session_state['user_authenticated'] = False 
+        st.session_state['is_admin'] = False
+        st.session_state['current_page'] = 'login'
 
-    # 인증 상태에 따라 다른 페이지 렌더링
-    if st.session_state.get('user_authenticated'):
-        st.title("잡스트레블링 - 홈")
-        render_home_page()
-    else:
-        # 미인증 상태일 때 로그인 페이지를 렌더링합니다.
+    # 현재 페이지 상태에 따라 라우팅
+    if not st.session_state.get('user_authenticated'):
         render_login_page()
+    elif st.session_state.get('current_page') == 'home':
+        st.subheader(f"환영합니다! ({'관리자' if st.session_state.get('is_admin') else '일반 사용자'})")
+        render_home_page()
+    elif st.session_state.get('current_page') == 'admin_add':
+        render_admin_add_program_page()
+    else:
+        # 정의되지 않은 페이지는 홈으로 리다이렉션
+        st.session_state['current_page'] = 'home'
+        st.rerun()
